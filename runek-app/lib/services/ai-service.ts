@@ -1,8 +1,8 @@
 import { Job, TailoredContent } from "../types/job";
 
 /**
- * The RunekAgent is the core 'brain' of the automation.
- * In production, it connects to Google Generative AI (Gemini).
+ * RunekAgent — Gemini-powered CV & cover letter synthesizer.
+ * Returns structured JSON, not split text.
  */
 export class RunekAgent {
   private baseCv: string;
@@ -13,76 +13,77 @@ export class RunekAgent {
     this.apiKey = process.env.GOOGLE_API_KEY;
   }
 
-  /**
-   * Tailors the CV and generates a Cover Letter using Gemini API.
-   */
   async tailorForJob(job: Job): Promise<TailoredContent> {
     if (!this.apiKey) {
-      console.warn("[RunekAgent] No GOOGLE_API_KEY found. Falling back to mock mode.");
-      return this.getMockResponse(job);
+      console.warn("[RunekAgent] No GOOGLE_API_KEY — using mock output.");
+      return this.mockResponse(job);
     }
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.apiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: this.buildPrompt(job)
-            }]
-          }]
-        })
-      });
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: this.buildPrompt(job) }] }],
+            generationConfig: { responseMimeType: "application/json" },
+          }),
+        }
+      );
 
       const data = await response.json();
-      const output = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!raw) throw new Error("Empty Gemini response");
 
-      if (!output) throw new Error("Invalid response from Gemini API");
-
+      const parsed = JSON.parse(raw);
       return {
         jobId: job.id,
-        cvMarkdown: output.split("---COVERLETTER---")[0]?.trim() || this.baseCv,
-        coverLetter: output.split("---COVERLETTER---")[1]?.trim() || "Cover letter generation failed.",
-        tailoringNotes: `Successfully tailored using Gemini 1.5 Flash for ${job.category}.`,
+        cvMarkdown: parsed.cv ?? this.baseCv,
+        coverLetter: parsed.coverLetter ?? "",
+        tailoringNotes: parsed.notes ?? "",
+        matchHighlights: parsed.highlights ?? [],
         generatedAt: new Date().toISOString(),
       };
-    } catch (error) {
-      console.error("[RunekAgent] API Error:", error);
-      return this.getMockResponse(job);
+    } catch (err) {
+      console.error("[RunekAgent] API error:", err);
+      return this.mockResponse(job);
     }
   }
 
   private buildPrompt(job: Job): string {
     return `
-      You are a Systems Product Manager assistant named Runek. 
-      Task: Tailor the following CV for a specifically targeted role.
-      
-      TARGET JOB: ${job.title} at ${job.company}
-      CATEGORY: ${job.category}
-      JD DESCRIPTION: ${job.description}
-      
-      BASE CV:
-      ${this.baseCv}
-      
-      Instructions:
-      1. Rewrite the professional summary to highlight matching skills.
-      2. Reorder experience to put the most relevant projects for ${job.category} first.
-      3. Generate a compelling, high-signal cover letter.
-      
-      Output Format:
-      [Tailored CV Markdown]
-      ---COVERLETTER---
-      [Cover Letter Text]
-    `;
+You are Runek, an elite Systems PM career agent for Ignacy Januszek.
+
+Task: Tailor the CV and write a cover letter for this role. Return ONLY valid JSON.
+
+TARGET ROLE:
+- Title: ${job.title}
+- Company: ${job.company}
+- Location: ${job.location}
+- Category: ${job.category}
+- Description: ${job.description}
+
+IGNACY'S BASE CV:
+${this.baseCv}
+
+Return this exact JSON structure:
+{
+  "cv": "<full rewritten CV in markdown, reordered to lead with most relevant experience for this ${job.category} role>",
+  "coverLetter": "<compelling 3-paragraph letter, opening with a systems insight, not 'I am writing to apply'>",
+  "notes": "<2-sentence summary of key tailoring decisions made>",
+  "highlights": ["<top selling point 1>", "<top selling point 2>", "<top selling point 3>"]
+}
+    `.trim();
   }
 
-  private getMockResponse(job: Job): TailoredContent {
+  private mockResponse(job: Job): TailoredContent {
     return {
       jobId: job.id,
-      cvMarkdown: `# Tailored: ${job.title} - Ignacy Januszek\n\n[...Mocked Content...]`,
-      coverLetter: `Dear ${job.company} Team,\n\nI am writing to express my interest in the ${job.title} position...`,
-      tailoringNotes: "Mock mode: Please provide a GOOGLE_API_KEY in Vercel to enable live AI tailoring.",
+      cvMarkdown: `# ${job.title} — Ignacy Januszek\n\n[AI synthesis offline — add GOOGLE_API_KEY to enable]\n\n${this.baseCv}`,
+      coverLetter: `Building ${job.category.toLowerCase()} systems that matter requires a PM who can speak both engineering and business fluently.\n\nAt ProcessMate AI, I led product discovery cycles that directly reduced client operational overhead. At AGH Marines, I translated between computer vision engineers and mission stakeholders for our AUV programme.\n\nI would be energised to bring this systems-first approach to ${job.company}.\n\n— Ignacy Januszek`,
+      tailoringNotes: `Mock mode. Add GOOGLE_API_KEY to Vercel env vars for live synthesis.`,
+      matchHighlights: ["Systems PM background", `${job.category} sector alignment`, "Open to relocation"],
       generatedAt: new Date().toISOString(),
     };
   }
