@@ -3,6 +3,11 @@ import { pipelineStore } from '../../../../lib/services/pipeline-store';
 import { RunekAgent } from '../../../../lib/services/ai-service';
 import { IGNACY_PROFILE } from '../../../../lib/data/profile';
 
+// Helper: extract user-supplied API key from headers
+function getUserApiKey(request: Request): string | undefined {
+  return request.headers.get('x-api-key') ?? request.headers.get('x-google-api-key') ?? undefined;
+}
+
 /**
  * POST /api/agent/tailor
  * Trigger AI synthesis for a job. Returns tailored CV + cover letter.
@@ -16,10 +21,17 @@ export async function POST(request: Request) {
     const job = pipelineStore.getById(jobId);
     if (!job) return NextResponse.json({ ok: false, error: 'Job not found' }, { status: 404 });
 
-    pipelineStore.log('TAILOR', `Initiating synthesis for ${job.title} @ ${job.company}`, jobId);
+    const userApiKey = getUserApiKey(request);
+    pipelineStore.log('TAILOR', `Initiating synthesis for ${job.title} @ ${job.company}`, jobId, userApiKey ? 'user-key' : 'env-key');
 
-    const agent = new RunekAgent(IGNACY_PROFILE.baseCV);
-    const result = await agent.tailorForJob(job);
+    const agent = new RunekAgent(IGNACY_PROFILE.baseCV, userApiKey);
+    let result;
+    try {
+      result = await agent.tailorForJob(job);
+    } catch (apiErr) {
+      const msg = apiErr instanceof Error ? apiErr.message : 'API key error';
+      return NextResponse.json({ ok: false, error: msg, hint: 'Pass your Gemini API key via X-Api-Key header' }, { status: 402 });
+    }
 
     // Mark as tailored
     pipelineStore.update(jobId, {

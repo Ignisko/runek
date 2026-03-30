@@ -38,7 +38,19 @@ export default function Home() {
   const [tailored, setTailored] = useState<TailoredContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
+  const [apiKey, setApiKey] = useState<string>('');
   const logRef = useRef<HTMLDivElement>(null);
+
+  // Persist API key to localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem('runek-api-key');
+    if (stored) setApiKey(stored);
+  }, []);
+
+  const saveApiKey = (key: string) => {
+    setApiKey(key);
+    localStorage.setItem('runek-api-key', key);
+  };
 
   // ── Data Fetching ──────────────────────────────────────────────────────────
 
@@ -79,12 +91,18 @@ export default function Home() {
     setTailoring(jobId);
     setTailored(null);
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (apiKey) headers['X-Api-Key'] = apiKey;
       const res = await fetch('/api/agent/tailor', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ jobId }),
       });
       const data = await res.json();
+      if (!data.ok && data.hint) {
+        alert(`API Key error: ${data.error}\n\n${data.hint}`);
+        return;
+      }
       setTailored(data.data);
       fetchAll();
     } finally {
@@ -206,6 +224,9 @@ export default function Home() {
 
           {/* Signal Panel */}
           <SignalPanel status={status} lastIngested={status?.lastIngest} />
+
+          {/* API Key Panel */}
+          <ApiKeyPanel apiKey={apiKey} onSave={saveApiKey} />
 
           {/* Mission Detail / Tailoring Result */}
           {tailored ? (
@@ -441,6 +462,50 @@ function EmptyDetail() {
         SELECT A MISSION TARGET<br />TO VIEW BRIEF
       </p>
       <p className="text-[8px] font-mono text-white/10">OR POST TO /api/agent/ingest</p>
+    </div>
+  );
+}
+
+function ApiKeyPanel({ apiKey, onSave }: { apiKey: string; onSave: (k: string) => void }) {
+  const [input, setInput] = React.useState(apiKey);
+  const [saved, setSaved] = React.useState(false);
+
+  const handleSave = () => {
+    onSave(input.trim());
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div className="border border-white/5 rounded bg-white/[0.01] p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-[9px] tracking-[0.3em] text-white/20 font-mono">OPERATOR API KEY</span>
+        <span className="text-[8px] font-mono text-white/10">BYOK — your credits only</span>
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="password"
+          placeholder="AIzaSy..."
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleSave()}
+          className="flex-1 bg-black border border-white/10 rounded px-3 py-2 text-[10px] font-mono text-white/60 placeholder:text-white/15 focus:outline-none focus:border-[#00f5ff]/30"
+        />
+        <button
+          onClick={handleSave}
+          className="px-3 py-2 text-[9px] font-black border rounded transition-all"
+          style={{
+            borderColor: saved ? '#00ff41' : 'rgba(0,245,255,0.2)',
+            color: saved ? '#00ff41' : '#00f5ff',
+          }}
+        >
+          {saved ? 'SAVED ✓' : 'SET'}
+        </button>
+      </div>
+      <p className="text-[8px] font-mono text-white/15 leading-relaxed">
+        Get a free key at <span className="text-white/30">aistudio.google.com</span>.
+        Stored locally — never sent to our servers.
+      </p>
     </div>
   );
 }
