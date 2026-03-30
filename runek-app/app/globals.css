@@ -1,24 +1,26 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #0a0a0a;
-  --color-foreground: #e0e0e0;
+  --color-background: #000000;
+  --color-foreground: #ffffff;
   --color-primary: #00f5ff;
   --color-secondary: #00ff41;
   --color-accent: #a020f0;
+  --color-obsidian: #0a0a0a;
   
   --font-sans: var(--font-inter);
   --font-outfit: var(--font-outfit);
 }
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #e0e0e0;
+  --background: #000000;
+  --foreground: #f0f0f0;
   --primary: #00f5ff;
   --secondary: #00ff41;
   --accent: #a020f0;
-  --card-bg: rgba(255, 255, 255, 0.03);
-  --border-color: rgba(255, 255, 255, 0.1);
+  --obsidian: #0a0a0a;
+  --card-bg: rgba(20, 20, 20, 0.4);
+  --border-color: rgba(255, 255, 255, 0.08);
 }
 
 @layer base {
@@ -26,59 +28,89 @@
     background-color: var(--background);
     color: var(--foreground);
     font-feature-settings: "cv02", "cv03", "cv04", "ss01";
+    -webkit-font-smoothing: antialiased;
+    background-image: 
+      radial-gradient(circle at 50% -20%, rgba(0, 245, 255, 0.08), transparent 40%),
+      radial-gradient(circle at 100% 100%, rgba(160, 32, 240, 0.05), transparent 30%);
+    background-attachment: fixed;
   }
 }
 
 @layer components {
   .glass-card {
     background-color: var(--card-bg);
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     border: 1px solid var(--border-color);
-    border-radius: 0.75rem;
-    transition: all 0.3s ease;
+    border-radius: 1rem;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   }
   
   .glass-card:hover {
-    border-color: rgba(0, 245, 255, 0.3);
-    box-shadow: 0 0 30px rgba(0, 245, 255, 0.05);
+    border-color: rgba(0, 245, 255, 0.4);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 245, 255, 0.05);
+    transform: translateY(-2px);
   }
 
   .btn-primary {
-    padding: 0.75rem 1.5rem;
-    background-color: var(--primary);
-    color: var(--background);
-    font-weight: 700;
-    border-radius: 0.5rem;
-    transition: all 0.2s ease;
+    padding: 0.8rem 1.8rem;
+    background: linear-gradient(135deg, var(--primary), #00d4ff);
+    color: #000000;
+    font-weight: 800;
+    font-family: var(--font-outfit);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-radius: 0.6rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0, 245, 255, 0.2);
   }
 
   .btn-primary:hover {
-    filter: brightness(1.1);
+    filter: brightness(1.15);
+    box-shadow: 0 8px 25px rgba(0, 245, 255, 0.3);
+    transform: translateY(-1px);
   }
 
   .btn-primary:active {
-    transform: scale(0.95);
+    transform: scale(0.97);
   }
 
   .text-glow {
-    text-shadow: 0 0 8px rgba(0, 245, 255, 0.5);
+    text-shadow: 0 0 12px rgba(0, 245, 255, 0.6);
   }
+
+  .nav-blur {
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+}
+
+/* Animations */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; filter: brightness(1); }
+  50% { opacity: 0.85; filter: brightness(1.2); }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 3s infinite ease-in-out;
 }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--background);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--primary);
 }
