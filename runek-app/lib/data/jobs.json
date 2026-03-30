@@ -1,0 +1,41 @@
+[
+  {
+    "id": "job-1",
+    "title": "Systems Product Manager",
+    "company": "Orbit Robotics",
+    "location": "Munich (Relocation)",
+    "description": "We are building the future of underwater maintenance drones. Looking for a technical PM to bridge the gap between our computer vision team and industrial clients. Focus on AUV autonomous systems and hardware-software integration.",
+    "url": "https://orbit-robotics.com/careers/systems-pm",
+    "source": "Wellfound",
+    "postedAt": "2026-03-30T10:00:00Z",
+    "status": "suggested",
+    "matchScore": 92,
+    "category": "Robotics"
+  },
+  {
+    "id": "job-2",
+    "title": "Technical Product Manager",
+    "company": "VoltGrid AI",
+    "location": "London",
+    "description": "Optimizing the UK power grid using RL agents. We need someone who understands systems modeling and ROI for energy infrastructure. Looking for candidates with strong background in industrial data and AI-driven efficiency.",
+    "url": "https://voltgrid.ai/jobs/tpm-energy",
+    "source": "Climatebase",
+    "postedAt": "2026-03-30T12:00:00Z",
+    "status": "suggested",
+    "matchScore": 88,
+    "category": "Energy"
+  },
+  {
+    "id": "job-3",
+    "title": "AI Growth PM",
+    "company": "NovaStream",
+    "location": "Singapore / Remote",
+    "description": "Zero-to-one product growth for our AI-powered content automation suite. Focusing on rapid experimentation and user acquisition in SE Asia.",
+    "url": "https://novastream.io/careers",
+    "source": "Wellfound",
+    "postedAt": "2026-03-30T14:00:00Z",
+    "status": "suggested",
+    "matchScore": 85,
+    "category": "AI"
+  }
+]
