@@ -3,21 +3,29 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Job, AgentLog, AgentStatus, TailoredContent } from "../lib/types/job";
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Token helpers ─────────────────────────────────────────────────────────────
 
 function priorityColor(p: Job["priority"]) {
-  return { critical: "#ff2d2d", high: "#ffa500", medium: "#00f5ff", low: "#ffffff30" }[p] ?? "#ffffff30";
+  return {
+    critical: "var(--color-critical)",
+    high:     "var(--color-high)",
+    medium:   "var(--color-medium)",
+    low:      "var(--color-low)",
+  }[p] ?? "var(--color-low)";
 }
-function scoreColor(s: number) {
-  if (s >= 88) return "#ff2d2d";
-  if (s >= 75) return "#ffa500";
-  if (s >= 55) return "#00f5ff";
-  return "#ffffff30";
+
+function scoreBadge(score: number) {
+  if (score >= 88) return { bg: "rgba(248,81,73,0.12)", color: "var(--color-critical)", label: "Critical" };
+  if (score >= 75) return { bg: "rgba(210,153,34,0.12)", color: "var(--color-high)", label: "High" };
+  if (score >= 55) return { bg: "rgba(56,139,253,0.12)", color: "var(--color-medium)", label: "Medium" };
+  return { bg: "rgba(72,79,88,0.2)", color: "var(--color-low)", label: "Low" };
 }
+
 function formatTime(iso?: string) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
+
 function useCopy() {
   const [copied, setCopied] = useState<string | null>(null);
   const copy = (text: string, key: string) => {
@@ -36,6 +44,40 @@ interface OutreachDraft {
   mock?: boolean;
 }
 
+// ── Shared styles ─────────────────────────────────────────────────────────────
+
+const card: React.CSSProperties = {
+  background: "var(--bg-card)",
+  border: "1px solid var(--border-subtle)",
+  borderRadius: 10,
+  padding: "16px",
+};
+
+const btnPrimary: React.CSSProperties = {
+  background: "var(--accent)",
+  color: "#fff",
+  border: "none",
+  borderRadius: 8,
+  padding: "10px 16px",
+  fontSize: 13,
+  fontWeight: 600,
+  cursor: "pointer",
+  width: "100%",
+  transition: "opacity 0.15s",
+};
+
+const btnGhost: React.CSSProperties = {
+  background: "transparent",
+  color: "var(--text-secondary)",
+  border: "1px solid var(--border-default)",
+  borderRadius: 8,
+  padding: "8px 12px",
+  fontSize: 12,
+  fontWeight: 500,
+  cursor: "pointer",
+  transition: "all 0.15s",
+};
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -50,7 +92,6 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [apiKey, setApiKey] = useState("");
   const [checklist, setChecklist] = useState<Record<number, boolean>>({});
-  const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const k = localStorage.getItem("runek-api-key");
@@ -62,8 +103,6 @@ export default function Home() {
     localStorage.setItem("runek-api-key", key);
   };
 
-  // ── Data Fetching ──────────────────────────────────────────────────────────
-
   const fetchAll = useCallback(async () => {
     try {
       const [jr, sr] = await Promise.all([fetch("/api/agent/jobs"), fetch("/api/agent/status")]);
@@ -73,7 +112,7 @@ export default function Home() {
       setLogs(jd.data.logs ?? []);
       setStatus(sd.data ?? null);
     } catch (e) {
-      console.error("[HUD]", e);
+      console.error(e);
     } finally {
       setLoading(false);
     }
@@ -84,8 +123,6 @@ export default function Home() {
     const i = setInterval(fetchAll, 10000);
     return () => clearInterval(i);
   }, [fetchAll]);
-
-  // ── Actions ────────────────────────────────────────────────────────────────
 
   const authHeaders = (extra?: Record<string, string>) => {
     const h: Record<string, string> = { "Content-Type": "application/json", ...extra };
@@ -99,11 +136,7 @@ export default function Home() {
     setOutreach(null);
     setChecklist({});
     try {
-      const res = await fetch("/api/agent/tailor", {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ jobId }),
-      });
+      const res = await fetch("/api/agent/tailor", { method: "POST", headers: authHeaders(), body: JSON.stringify({ jobId }) });
       const data = await res.json();
       if (!data.ok) { alert(data.error + (data.hint ? `\n\n${data.hint}` : "")); return; }
       setTailored(data.data);
@@ -116,11 +149,7 @@ export default function Home() {
   const handleOutreach = async (jobId: string) => {
     setOutreachLoading(true);
     try {
-      const res = await fetch("/api/agent/outreach", {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ jobId }),
-      });
+      const res = await fetch("/api/agent/outreach", { method: "POST", headers: authHeaders(), body: JSON.stringify({ jobId }) });
       const data = await res.json();
       if (data.ok) setOutreach(data.data);
     } finally {
@@ -129,23 +158,13 @@ export default function Home() {
   };
 
   const handleStatusUpdate = async (jobId: string, newStatus: Job["status"]) => {
-    await fetch(`/api/agent/jobs/${jobId}/status`, {
-      method: "PATCH",
-      headers: authHeaders(),
-      body: JSON.stringify({ status: newStatus }),
-    });
+    await fetch(`/api/agent/jobs/${jobId}/status`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify({ status: newStatus }) });
     fetchAll();
   };
 
   const handleNotes = async (jobId: string, notes: string) => {
-    await fetch(`/api/agent/jobs/${jobId}/notes`, {
-      method: "PATCH",
-      headers: authHeaders(),
-      body: JSON.stringify({ notes }),
-    });
+    await fetch(`/api/agent/jobs/${jobId}/notes`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify({ notes }) });
   };
-
-  // ── Keyboard Shortcuts ─────────────────────────────────────────────────────
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -153,75 +172,93 @@ export default function Home() {
       if (e.key === "t" || e.key === "T") handleTailor(selected);
       if (e.key === "d" || e.key === "D") handleStatusUpdate(selected, "discarded");
       if (e.key === "a" || e.key === "A") handleStatusUpdate(selected, "applied");
-      if (e.key === "o" || e.key === "O") {
-        const job = jobs.find((j) => j.id === selected);
-        if (job?.url) window.open(job.url, "_blank");
-      }
+      if (e.key === "o" || e.key === "O") { const j = jobs.find(j => j.id === selected); if (j?.url) window.open(j.url, "_blank"); }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, [selected, jobs]);
 
-  const activeMissions = jobs.filter((j) => j.status !== "discarded").sort((a, b) => b.matchScore - a.matchScore);
-  const selectedJob = jobs.find((j) => j.id === selected);
-  const showChecklist = tailored && selectedJob;
+  const activeMissions = jobs.filter(j => j.status !== "discarded").sort((a, b) => b.matchScore - a.matchScore);
+  const selectedJob = jobs.find(j => j.id === selected);
 
   return (
-    <div style={{ fontFamily: "'JetBrains Mono','Courier New',monospace" }} className="min-h-screen bg-black text-white">
+    <div style={{ minHeight: "100vh", background: "var(--bg-base)" }}>
       {/* ── NAV ── */}
-      <header className="border-b border-white/10 bg-black sticky top-0 z-50">
-        <div className="max-w-[1600px] mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <span className="text-xl font-black tracking-[0.3em]">
-              RUN<span style={{ color: "#00f5ff" }}>EK</span>
-              <span className="text-[10px] text-white/20 ml-2 tracking-widest">v0.3</span>
+      <header style={{
+        borderBottom: "1px solid var(--border-subtle)",
+        background: "var(--bg-surface)",
+        position: "sticky", top: 0, zIndex: 50,
+      }}>
+        <div style={{ maxWidth: 1440, margin: "0 auto", padding: "0 24px", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          {/* Logo */}
+          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+            <span style={{ fontWeight: 700, fontSize: 18, letterSpacing: "0.1em", color: "var(--text-primary)" }}>
+              Run<span style={{ color: "var(--accent)" }}>ek</span>
             </span>
-            <span className="text-[10px] text-white/20">COMMAND CENTER // SYSTEMS PM OPS</span>
+            <span style={{ fontSize: 12, color: "var(--text-tertiary)", borderLeft: "1px solid var(--border-subtle)", paddingLeft: 16 }}>
+              Job Application Engine
+            </span>
           </div>
-          <div className="flex items-center gap-8">
+
+          {/* Status bar */}
+          <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
             {status && (
-              <div className="hidden md:flex gap-6 text-[10px] font-mono">
-                <span><span style={{ color: "#ff2d2d" }}>{status.pipeline.queued}</span> <span className="text-white/30">QUEUED</span></span>
-                <span><span style={{ color: "#00f5ff" }}>{status.pipeline.suggested}</span> <span className="text-white/30">ACTIVE</span></span>
-                <span><span style={{ color: "#ffa500" }}>{status.pipeline.tailored}</span> <span className="text-white/30">SYNTHESIZED</span></span>
-                <span><span style={{ color: "#00ff41" }}>{status.pipeline.applied}</span> <span className="text-white/30">DEPLOYED</span></span>
+              <div style={{ display: "flex", gap: 20, fontSize: 12, color: "var(--text-secondary)" }}>
+                {[
+                  ["Queued", status.pipeline.queued, "var(--text-secondary)"],
+                  ["Active", status.pipeline.suggested, "var(--accent)"],
+                  ["Synthesized", status.pipeline.tailored, "var(--color-high)"],
+                  ["Applied", status.pipeline.applied, "var(--color-success)"],
+                ].map(([label, val, color]) => (
+                  <span key={label as string} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontWeight: 600, color: color as string }}>{val as number}</span>
+                    <span style={{ color: "var(--text-tertiary)" }}>{label as string}</span>
+                  </span>
+                ))}
               </div>
             )}
-            <div className="flex items-center gap-2 text-[10px]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#00ff41] animate-pulse shadow-[0_0_6px_#00ff41]" />
-              <span style={{ color: "#00ff41" }}>AGENT ONLINE</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--color-success)", flexShrink: 0 }} />
+              <span style={{ color: "var(--color-success)", fontWeight: 500 }}>Live</span>
             </div>
-            <span className="text-[10px] text-white/20 tabular-nums">{new Date().toLocaleTimeString("en-GB")}</span>
           </div>
         </div>
       </header>
 
-      <div className="max-w-[1600px] mx-auto px-6 py-6 grid grid-cols-12 gap-6" style={{ minHeight: "calc(100vh - 3.5rem)" }}>
-        {/* ── MISSION FEED ── */}
-        <div className="col-span-12 lg:col-span-7 flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] tracking-[0.3em] text-white/30">MISSION FEED // {activeMissions.length} ACTIVE TARGETS</span>
-            <div className="flex gap-3 text-[9px] text-white/20">
-              <span style={{ color: "#ff2d2d" }}>■</span> CRITICAL
-              <span style={{ color: "#ffa500" }}>■</span> HIGH
-              <span style={{ color: "#00f5ff" }}>■</span> MEDIUM
+      {/* ── BODY ── */}
+      <div style={{ maxWidth: 1440, margin: "0 auto", padding: "24px 24px", display: "grid", gridTemplateColumns: "1fr 380px", gap: 24 }}>
+
+        {/* ── LEFT: FEED ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+          {/* Feed header */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <h1 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>
+                Job Feed
+              </h1>
+              <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--text-secondary)" }}>
+                {activeMissions.length} opportunities · ranked by match
+              </p>
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text-tertiary)", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 6, padding: "6px 12px" }}>
+              <span style={{ color: "var(--text-secondary)" }}>T</span> synthesize &nbsp;
+              <span style={{ color: "var(--text-secondary)" }}>O</span> open &nbsp;
+              <span style={{ color: "var(--text-secondary)" }}>A</span> applied &nbsp;
+              <span style={{ color: "var(--text-secondary)" }}>D</span> discard
             </div>
           </div>
-          <div className="text-[9px] border border-white/5 rounded px-3 py-1.5 bg-white/[0.02] text-white/20">
-            SELECT MISSION → <span className="text-white/40">[T]</span> Synthesize &nbsp;
-            <span className="text-white/40">[O]</span> Open Posting &nbsp;
-            <span className="text-white/40">[A]</span> Applied &nbsp;
-            <span className="text-white/40">[D]</span> Discard
-          </div>
 
-          <div className="space-y-2 overflow-y-auto" style={{ maxHeight: "calc(100vh - 16rem)" }}>
+          {/* Job cards */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {loading ? (
-              <div className="flex flex-col items-center justify-center h-48 gap-3">
-                <div className="w-8 h-8 border border-[#00f5ff]/30 border-t-[#00f5ff] rounded-full animate-spin" />
-                <span className="text-[10px] text-white/20 animate-pulse tracking-widest">INITIALIZING PIPELINE...</span>
+              <div style={{ ...card, padding: 48, textAlign: "center", color: "var(--text-tertiary)" }}>
+                <div style={{ marginBottom: 12, fontSize: 13 }}>Loading opportunities...</div>
+                <div style={{ height: 2, background: "var(--border-subtle)", borderRadius: 1, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: "60%", background: "var(--accent)", borderRadius: 1, animation: "pulse 1.5s ease-in-out infinite" }} />
+                </div>
               </div>
             ) : activeMissions.map((job) => (
-              <MissionCard
+              <JobCard
                 key={job.id}
                 job={job}
                 isSelected={selected === job.id}
@@ -237,123 +274,163 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ── RIGHT PANEL ── */}
-        <div className="col-span-12 lg:col-span-5 flex flex-col gap-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 5rem)" }}>
-          <SignalPanel status={status} lastIngested={status?.lastIngest} />
+        {/* ── RIGHT: SIDEBAR ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, maxHeight: "calc(100vh - 80px)", overflowY: "auto", position: "sticky", top: 80 }}>
+
+          {/* Stats card */}
+          <StatsCard status={status} />
+
+          {/* API Key */}
           <ApiKeyPanel apiKey={apiKey} onSave={saveApiKey} />
 
-          {/* GUIDED APPLICATION CHECKLIST — shows after synthesis */}
-          {showChecklist && (
+          {/* Application checklist or mission brief */}
+          {tailored && selectedJob ? (
             <ApplicationChecklist
-              job={selectedJob!}
-              tailored={tailored!}
+              job={selectedJob}
+              tailored={tailored}
               outreach={outreach}
               outreachLoading={outreachLoading}
               checklist={checklist}
-              onCheckStep={(i) => setChecklist((c) => ({ ...c, [i]: !c[i] }))}
-              onGenerateOutreach={() => handleOutreach(selectedJob!.id)}
-              onMarkApplied={() => { handleStatusUpdate(selectedJob!.id, "applied"); setChecklist({ 0: true, 1: true, 2: true, 3: true }); }}
+              onCheckStep={(i) => setChecklist(c => ({ ...c, [i]: !c[i] }))}
+              onGenerateOutreach={() => handleOutreach(selectedJob.id)}
+              onMarkApplied={() => { handleStatusUpdate(selectedJob.id, "applied"); setChecklist({ 0: true, 1: true, 2: true, 3: true, 4: true }); }}
             />
+          ) : selectedJob ? (
+            <MissionBrief job={selectedJob} isTailoring={tailoring === selectedJob.id} onTailor={() => handleTailor(selectedJob.id)} />
+          ) : (
+            <EmptyState />
           )}
 
-          {/* MISSION DETAIL — shown when job selected but not yet synthesized */}
-          {!showChecklist && selectedJob && (
-            <MissionDetail
-              job={selectedJob}
-              isTailoring={tailoring === selectedJob.id}
-              onTailor={() => handleTailor(selectedJob.id)}
-            />
-          )}
-
-          {!selectedJob && !showChecklist && <EmptyDetail />}
-
-          {/* OPERATOR LOG */}
-          <div ref={logRef} className="border border-white/5 rounded bg-black">
-            <div className="px-3 py-2 border-b border-white/5 text-[9px] text-white/20 tracking-[0.2em]">
-              OPERATOR LOG // LAST {logs.length} EVENTS
-            </div>
-            <div className="p-3 space-y-1 max-h-40 overflow-y-auto">
-              {logs.map((log, i) => (
-                <div key={i} className="flex gap-3 text-[9px] leading-relaxed">
-                  <span className="text-white/15 whitespace-nowrap tabular-nums">{formatTime(log.timestamp)}</span>
-                  <span className="text-[#00f5ff]/60 uppercase w-24 flex-shrink-0">{log.action}</span>
-                  <span className="text-white/30 truncate">{log.detail}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          {/* Recent activity */}
+          <ActivityLog logs={logs} />
         </div>
       </div>
     </div>
   );
 }
 
-// ── MissionCard ───────────────────────────────────────────────────────────────
+// ── JobCard ───────────────────────────────────────────────────────────────────
 
-function MissionCard({ job, isSelected, isTailoring, onClick, onTailor, onOpen, onApplied, onDiscard, onNotes }: {
+function JobCard({ job, isSelected, isTailoring, onClick, onTailor, onOpen, onApplied, onDiscard, onNotes }: {
   job: Job; isSelected: boolean; isTailoring: boolean;
   onClick: () => void; onTailor: () => void; onOpen: () => void;
-  onApplied: () => void; onDiscard: () => void;
-  onNotes: (n: string) => void;
+  onApplied: () => void; onDiscard: () => void; onNotes: (n: string) => void;
 }) {
+  const badge = scoreBadge(job.matchScore);
   const pc = priorityColor(job.priority);
-  const sc = scoreColor(job.matchScore);
   const [noteVal, setNoteVal] = useState(job.notes ?? "");
   const [noteSaved, setNoteSaved] = useState(false);
 
   const saveNote = () => { onNotes(noteVal); setNoteSaved(true); setTimeout(() => setNoteSaved(false), 1500); };
 
+  const statusLabel: Record<string, { label: string; color: string; bg: string }> = {
+    tailored: { label: "Synthesized", color: "var(--color-success)", bg: "rgba(63,185,80,0.1)" },
+    applied: { label: "Applied", color: "var(--color-purple)", bg: "rgba(188,140,255,0.1)" },
+    suggested: { label: "", color: "", bg: "" },
+    queued: { label: "", color: "", bg: "" },
+    discarded: { label: "", color: "", bg: "" },
+  };
+  const st = statusLabel[job.status];
+
   return (
-    <div onClick={onClick} style={{ borderColor: isSelected ? pc : "rgba(255,255,255,0.06)" }}
-      className="border rounded cursor-pointer bg-white/[0.02] hover:bg-white/[0.03] transition-colors">
-      <div style={{ background: pc, opacity: isSelected ? 1 : 0.25 }} className="h-[2px] rounded-t" />
-      <div className="px-4 py-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <span style={{ color: sc, textShadow: `0 0 8px ${sc}80` }} className="text-sm font-black tabular-nums">{job.matchScore}</span>
-              <span className="text-white/15 text-[9px]">/100</span>
-              <span style={{ color: pc, borderColor: `${pc}40` }} className="text-[9px] border px-1.5 py-0.5 rounded">{job.priority.toUpperCase()}</span>
-              {job.status === "tailored" && <span className="text-[9px] text-[#00ff41] border border-[#00ff41]/30 px-1.5 py-0.5 rounded">SYNTHESIZED</span>}
-              {job.status === "applied" && <span className="text-[9px] text-[#a020f0] border border-[#a020f0]/30 px-1.5 py-0.5 rounded">DEPLOYED</span>}
+    <div
+      onClick={onClick}
+      style={{
+        background: isSelected ? "var(--bg-hover)" : "var(--bg-card)",
+        border: `1px solid ${isSelected ? "var(--border-strong)" : "var(--border-subtle)"}`,
+        borderRadius: 10,
+        cursor: "pointer",
+        transition: "all 0.15s",
+        overflow: "hidden",
+      }}
+    >
+      {/* Score stripe */}
+      <div style={{ height: 3, background: pc, opacity: isSelected ? 0.8 : 0.35 }} />
+
+      <div style={{ padding: "14px 16px" }}>
+        {/* Top row */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            {/* Badges */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+              <span style={{ background: badge.bg, color: badge.color, border: `1px solid ${badge.color}30`, borderRadius: 5, padding: "2px 8px", fontSize: 12, fontWeight: 600 }}>
+                {job.matchScore}
+              </span>
+              <span style={{ background: badge.bg, color: badge.color, borderRadius: 5, padding: "2px 8px", fontSize: 11, fontWeight: 500 }}>
+                {badge.label}
+              </span>
+              {st.label && (
+                <span style={{ background: st.bg, color: st.color, borderRadius: 5, padding: "2px 8px", fontSize: 11, fontWeight: 500 }}>
+                  {st.label}
+                </span>
+              )}
+              <span style={{ fontSize: 11, color: "var(--text-tertiary)", marginLeft: "auto" }}>{job.category}</span>
             </div>
-            <p className="font-bold text-white text-sm truncate">{job.title}</p>
-            <p className="text-[11px] text-white/40">{job.company} // {job.location}</p>
-          </div>
-          <div className="flex-shrink-0 text-right">
-            <div className="text-[9px] text-white/20 mb-0.5">{job.category}</div>
-            <div className="text-[9px] text-white/15">{job.source}</div>
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {job.title}
+            </h3>
+            <p style={{ margin: "3px 0 0", fontSize: 12, color: "var(--text-secondary)" }}>
+              {job.company} · {job.location}
+            </p>
           </div>
         </div>
 
+        {/* Match signals */}
         {job.matchSignals && job.matchSignals.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {job.matchSignals.slice(0, 4).map((s) => (
-              <span key={s} className="text-[8px] px-1.5 py-0.5 rounded bg-white/[0.03] border border-white/[0.06] text-white/30">{s}</span>
+          <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 5 }}>
+            {job.matchSignals.slice(0, 4).map(s => (
+              <span key={s} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}>
+                {s}
+              </span>
             ))}
           </div>
         )}
 
+        {/* Match reason */}
+        {isSelected && job.matchReason && (
+          <p style={{ margin: "10px 0 0", fontSize: 12, color: "var(--accent)", borderLeft: "2px solid var(--accent-border)", paddingLeft: 10, lineHeight: 1.5 }}>
+            {job.matchReason}
+          </p>
+        )}
+
+        {/* Expanded actions */}
         {isSelected && (
-          <div className="mt-3 pt-3 border-t border-white/5 space-y-2" onClick={(e) => e.stopPropagation()}>
-            {/* Action row */}
-            <div className="flex gap-2">
-              <button onClick={onTailor} disabled={isTailoring}
-                className="flex-1 py-2 text-[10px] font-black tracking-widest rounded transition-all"
-                style={{ background: isTailoring ? "transparent" : "linear-gradient(135deg,#00f5ff,#00d4ff)", color: isTailoring ? "#00f5ff" : "#000", border: isTailoring ? "1px solid rgba(0,245,255,0.3)" : "none" }}>
-                {isTailoring ? <span className="flex items-center justify-center gap-2"><span className="w-2.5 h-2.5 border border-current border-t-transparent rounded-full animate-spin" />SYNTHESIZING...</span> : "SYNTHESIZE [T]"}
+          <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={onTailor} disabled={isTailoring} style={{ ...btnPrimary, opacity: isTailoring ? 0.7 : 1, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                {isTailoring ? (
+                  <><span style={{ width: 12, height: 12, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />Synthesizing…</>
+                ) : "✦ Synthesize with AI  ·  T"}
               </button>
-              <button onClick={onOpen} title="Open job posting [O]" className="px-3 py-2 text-[10px] font-bold border border-white/10 text-white/40 rounded hover:text-white hover:border-white/30 transition-all">↗</button>
-              <button onClick={onApplied} title="Mark applied [A]" className="px-3 py-2 text-[10px] font-bold border border-[#00ff41]/20 text-[#00ff41] rounded hover:bg-[#00ff41]/10 transition-all">A</button>
-              <button onClick={onDiscard} title="Discard [D]" className="px-3 py-2 text-[10px] font-bold border border-white/10 text-white/30 rounded hover:bg-white/5 transition-all">D</button>
+              <button onClick={onOpen} title="Open posting · O" style={{ ...btnGhost, display: "flex", alignItems: "center", gap: 4 }}>↗</button>
+              <button onClick={onApplied} title="Mark applied · A" style={{ ...btnGhost, color: "var(--color-success)", borderColor: "rgba(63,185,80,0.3)" }}>✓</button>
+              <button onClick={onDiscard} title="Discard · D" style={{ ...btnGhost }}>✕</button>
             </div>
             {/* Notes */}
-            <div className="flex gap-2">
-              <textarea value={noteVal} onChange={(e) => setNoteVal(e.target.value)} onBlur={saveNote}
-                placeholder="Notes... (e.g. 'Spoke to recruiter', 'Strong AUV match')"
-                className="flex-1 bg-black border border-white/10 rounded px-3 py-2 text-[10px] text-white/50 placeholder:text-white/15 resize-none focus:outline-none focus:border-white/20"
-                rows={2} maxLength={280} />
-              {noteSaved && <span className="text-[9px] text-[#00ff41] self-center">✓</span>}
+            <div style={{ position: "relative" }}>
+              <textarea
+                value={noteVal}
+                onChange={e => setNoteVal(e.target.value)}
+                onBlur={saveNote}
+                placeholder="Add notes… e.g. 'Spoke to recruiter · Salary unclear'"
+                rows={2}
+                maxLength={280}
+                style={{
+                  width: "100%",
+                  background: "var(--bg-surface)",
+                  border: "1px solid var(--border-subtle)",
+                  borderRadius: 8,
+                  padding: "10px 12px",
+                  fontSize: 12,
+                  color: "var(--text-secondary)",
+                  resize: "none",
+                  outline: "none",
+                  fontFamily: "inherit",
+                  lineHeight: 1.5,
+                  boxSizing: "border-box",
+                }}
+              />
+              {noteSaved && <span style={{ position: "absolute", right: 10, top: 10, fontSize: 11, color: "var(--color-success)" }}>Saved ✓</span>}
             </div>
           </div>
         )}
@@ -362,7 +439,34 @@ function MissionCard({ job, isSelected, isTailoring, onClick, onTailor, onOpen, 
   );
 }
 
-// ── ApplicationChecklist ─────────────────────────────────────────────────────
+// ── MissionBrief ──────────────────────────────────────────────────────────────
+
+function MissionBrief({ job, isTailoring, onTailor }: { job: Job; isTailoring: boolean; onTailor: () => void }) {
+  return (
+    <div style={card}>
+      <p style={{ margin: "0 0 12px", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-tertiary)" }}>Job Brief</p>
+      <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 600 }}>{job.title}</h3>
+      <p style={{ margin: "0 0 14px", fontSize: 12, color: "var(--accent)" }}>{job.company} · {job.location}</p>
+      <p style={{ margin: "0 0 14px", fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 5, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+        {job.description}
+      </p>
+      {job.matchReason && (
+        <p style={{ margin: "0 0 16px", fontSize: 12, color: "var(--accent)", borderLeft: "2px solid var(--accent-border)", paddingLeft: 10, lineHeight: 1.5 }}>
+          {job.matchReason}
+        </p>
+      )}
+      <button onClick={onTailor} disabled={isTailoring} style={{ ...btnPrimary, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, opacity: isTailoring ? 0.7 : 1, marginBottom: 10 }}>
+        {isTailoring ? <><span style={{ width: 12, height: 12, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />Synthesizing…</> : "✦ Synthesize CV + Cover Letter"}
+      </button>
+      <div style={{ display: "flex", gap: 8 }}>
+        {job.url && <a href={job.url} target="_blank" rel="noopener noreferrer" style={{ ...btnGhost, textDecoration: "none", textAlign: "center", flex: 1, display: "block" }}>View posting ↗</a>}
+        <a href={`/api/agent/export/${job.id}?format=markdown`} download style={{ ...btnGhost, textDecoration: "none", textAlign: "center", flex: 1, display: "block" }}>Export ↓</a>
+      </div>
+    </div>
+  );
+}
+
+// ── ApplicationChecklist ──────────────────────────────────────────────────────
 
 function ApplicationChecklist({ job, tailored, outreach, outreachLoading, checklist, onCheckStep, onGenerateOutreach, onMarkApplied }: {
   job: Job; tailored: TailoredContent; outreach: OutreachDraft | null;
@@ -370,181 +474,150 @@ function ApplicationChecklist({ job, tailored, outreach, outreachLoading, checkl
   onCheckStep: (i: number) => void; onGenerateOutreach: () => void; onMarkApplied: () => void;
 }) {
   const { copied, copy } = useCopy();
-  const steps = ["Review tailored CV", "Copy cover letter", "Draft cold outreach", "Open job posting", "Confirm application deployed"];
   const completedCount = Object.values(checklist).filter(Boolean).length;
+  const steps = ["Review tailored CV", "Copy cover letter", "Draft cold outreach", "Open job posting", "Mark as applied"];
+  const pct = (completedCount / steps.length) * 100;
 
   return (
-    <div className="border border-[#00f5ff]/20 rounded bg-[#00f5ff]/[0.02] flex flex-col gap-4 p-4">
+    <div style={{ ...card, display: "flex", flexDirection: "column", gap: 14 }}>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <span className="text-[9px] tracking-[0.3em] text-[#00f5ff]/70">MISSION EXECUTION // {job.company.toUpperCase()}</span>
-        <span className="text-[9px] font-mono text-white/20">{completedCount}/{steps.length} COMPLETE</span>
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <p style={{ margin: 0, fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-tertiary)" }}>Application Checklist</p>
+          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{completedCount}/{steps.length}</span>
+        </div>
+        <p style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>{job.title} · {job.company}</p>
+        {/* Progress */}
+        <div style={{ height: 4, background: "var(--bg-surface)", borderRadius: 2, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${pct}%`, background: pct === 100 ? "var(--color-success)" : "var(--accent)", borderRadius: 2, transition: "width 0.4s ease" }} />
+        </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="h-[2px] bg-white/5 rounded-full">
-        <div className="h-full bg-[#00f5ff] rounded-full transition-all duration-500" style={{ width: `${(completedCount / steps.length) * 100}%` }} />
-      </div>
-
-      {/* Step 1: Review CV */}
-      <ChecklistStep index={0} label="Review tailored CV" checked={!!checklist[0]} onToggle={() => onCheckStep(0)}>
-        <div className="mt-2 bg-black/50 rounded p-3 border border-white/5 max-h-32 overflow-y-auto">
-          <pre className="text-[9px] text-white/40 whitespace-pre-wrap leading-relaxed">{tailored.cvMarkdown.slice(0, 500)}{tailored.cvMarkdown.length > 500 ? "\n[...truncated]" : ""}</pre>
+      {/* Step 1: CV */}
+      <Step index={0} label="Review tailored CV" checked={!!checklist[0]} onToggle={() => onCheckStep(0)}>
+        <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 7, padding: 12, maxHeight: 120, overflowY: "auto", marginBottom: 8 }}>
+          <pre style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)", whiteSpace: "pre-wrap", lineHeight: 1.5, fontFamily: "'JetBrains Mono', monospace" }}>
+            {tailored.cvMarkdown.slice(0, 600)}{tailored.cvMarkdown.length > 600 ? "\n…" : ""}
+          </pre>
         </div>
-        <CopyButton text={tailored.cvMarkdown} label="COPY FULL CV" copiedKey="cv" copied={copied} onCopy={copy} />
-      </ChecklistStep>
+        <CopyBtn text={tailored.cvMarkdown} label="Copy full CV" k="cv" copied={copied} onCopy={(t, k) => { copy(t, k); onCheckStep(0); }} />
+      </Step>
 
-      {/* Step 2: Copy Cover Letter */}
-      <ChecklistStep index={1} label="Copy cover letter" checked={!!checklist[1]} onToggle={() => onCheckStep(1)}>
-        <div className="mt-2 bg-black/50 rounded p-3 border border-white/5 max-h-32 overflow-y-auto">
-          <p className="text-[9px] text-white/50 whitespace-pre-wrap leading-relaxed">{tailored.coverLetter}</p>
+      {/* Step 2: Cover letter */}
+      <Step index={1} label="Copy cover letter" checked={!!checklist[1]} onToggle={() => onCheckStep(1)}>
+        <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 7, padding: 12, maxHeight: 120, overflowY: "auto", marginBottom: 8 }}>
+          <p style={{ margin: 0, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{tailored.coverLetter}</p>
         </div>
-        <CopyButton text={tailored.coverLetter} label="COPY COVER LETTER" copiedKey="cl" copied={copied} onCopy={(t, k) => { copy(t, k); onCheckStep(1); }} />
-      </ChecklistStep>
+        <CopyBtn text={tailored.coverLetter} label="Copy cover letter" k="cl" copied={copied} onCopy={(t, k) => { copy(t, k); onCheckStep(1); }} />
+      </Step>
 
-      {/* Step 3: Cold Outreach */}
-      <ChecklistStep index={2} label="Draft cold outreach" checked={!!checklist[2]} onToggle={() => onCheckStep(2)}>
+      {/* Step 3: Outreach */}
+      <Step index={2} label="Draft cold outreach" checked={!!checklist[2]} onToggle={() => onCheckStep(2)}>
         {!outreach ? (
-          <button onClick={onGenerateOutreach} disabled={outreachLoading}
-            className="mt-2 w-full py-2 text-[10px] font-black tracking-widest border border-[#a020f0]/30 text-[#a020f0] rounded hover:bg-[#a020f0]/10 transition-all">
-            {outreachLoading ? "DRAFTING..." : "GENERATE OUTREACH DRAFT"}
+          <button onClick={onGenerateOutreach} disabled={outreachLoading} style={{ ...btnGhost, width: "100%", marginTop: 8 }}>
+            {outreachLoading ? "Generating…" : "Generate LinkedIn + Email outreach"}
           </button>
         ) : (
-          <div className="mt-2 space-y-3">
-            {outreach.mock && <div className="text-[8px] text-[#ffa500]/60 border border-[#ffa500]/20 rounded px-2 py-1">Mock mode — add API key for AI-personalised outreach</div>}
-            <div className="bg-black/50 rounded p-3 border border-[#a020f0]/20">
-              <div className="text-[8px] text-[#a020f0]/60 mb-1.5 uppercase tracking-widest">LinkedIn // {outreach.suggestedContact}</div>
-              <p className="text-[9px] text-white/50 leading-relaxed">{outreach.linkedinMessage}</p>
-              <CopyButton text={outreach.linkedinMessage} label="COPY" copiedKey="li" copied={copied} onCopy={(t, k) => { copy(t, k); onCheckStep(2); }} />
-            </div>
-            <div className="bg-black/50 rounded p-3 border border-[#a020f0]/20">
-              <div className="text-[8px] text-[#a020f0]/60 mb-1.5 uppercase tracking-widest">Email // Subject: {outreach.emailSubject}</div>
-              <p className="text-[9px] text-white/50 leading-relaxed whitespace-pre-wrap">{outreach.emailBody}</p>
-              <CopyButton text={`Subject: ${outreach.emailSubject}\n\n${outreach.emailBody}`} label="COPY EMAIL" copiedKey="em" copied={copied} onCopy={(t, k) => { copy(t, k); onCheckStep(2); }} />
-            </div>
+          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 10 }}>
+            {outreach.mock && (
+              <div style={{ fontSize: 11, color: "var(--color-high)", background: "rgba(210,153,34,0.1)", border: "1px solid rgba(210,153,34,0.2)", borderRadius: 6, padding: "6px 10px" }}>
+                Preview mode · add API key for personalised outreach
+              </div>
+            )}
+            <OutreachBlock title={`LinkedIn · ${outreach.suggestedContact}`} text={outreach.linkedinMessage} copyKey="li" copied={copied} onCopy={(t, k) => { copy(t, k); onCheckStep(2); }} />
+            <OutreachBlock title={`Email · ${outreach.emailSubject}`} text={outreach.emailBody} copyKey="em" copied={copied} onCopy={(t, k) => { copy(t, k); onCheckStep(2); }} fullText={`Subject: ${outreach.emailSubject}\n\n${outreach.emailBody}`} />
           </div>
         )}
-      </ChecklistStep>
+      </Step>
 
-      {/* Step 4: Open Job */}
-      <ChecklistStep index={3} label="Open job posting" checked={!!checklist[3]} onToggle={() => onCheckStep(3)}>
-        <button onClick={() => { if (job.url) { window.open(job.url, "_blank"); onCheckStep(3); } }}
-          className="mt-2 w-full py-2.5 text-[10px] font-black tracking-widest rounded border border-white/10 text-white/50 hover:border-white/30 hover:text-white transition-all">
-          OPEN {job.company.toUpperCase()} APPLICATION ↗
+      {/* Step 4: Open posting */}
+      <Step index={3} label="Open job posting" checked={!!checklist[3]} onToggle={() => onCheckStep(3)}>
+        <button onClick={() => { if (job.url) { window.open(job.url, "_blank"); onCheckStep(3); } }} style={{ ...btnGhost, width: "100%", marginTop: 8 }}>
+          Open {job.company} application ↗
         </button>
-      </ChecklistStep>
+      </Step>
 
-      {/* Step 5: Confirm Applied */}
-      <ChecklistStep index={4} label="Confirm application deployed" checked={!!checklist[4]} onToggle={() => onCheckStep(4)}>
-        <button onClick={onMarkApplied}
-          className="mt-2 w-full py-3 text-[10px] font-black tracking-widest rounded transition-all"
-          style={{ background: checklist[4] ? "#00ff41" : "transparent", color: checklist[4] ? "#000" : "#00ff41", border: `1px solid ${checklist[4] ? "#00ff41" : "rgba(0,255,65,0.3)"}` }}>
-          {checklist[4] ? "✓ APPLICATION DEPLOYED" : "MARK AS DEPLOYED"}
+      {/* Step 5: Confirm */}
+      <Step index={4} label="Mark as applied" checked={!!checklist[4]} onToggle={() => onCheckStep(4)}>
+        <button onClick={onMarkApplied} style={{
+          ...btnPrimary, marginTop: 8,
+          background: checklist[4] ? "var(--color-success)" : "var(--accent)",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        }}>
+          {checklist[4] ? "✓ Applied — well done!" : "Confirm application sent"}
         </button>
-      </ChecklistStep>
+      </Step>
 
-      {/* Download */}
-      <a href={`/api/agent/export/${job.id}?format=markdown`} download
-        className="text-center text-[9px] font-mono text-white/20 hover:text-white/40 border border-white/5 rounded py-2 transition-colors">
-        DOWNLOAD FULL MANIFEST ↓
+      <a href={`/api/agent/export/${job.id}?format=markdown`} download style={{ textAlign: "center", fontSize: 12, color: "var(--text-tertiary)", textDecoration: "none", paddingTop: 4 }}>
+        Download full application package ↓
       </a>
     </div>
   );
 }
 
-// ── ChecklistStep ─────────────────────────────────────────────────────────────
+// ── Step ──────────────────────────────────────────────────────────────────────
 
-function ChecklistStep({ index, label, checked, onToggle, children }: {
+function Step({ index, label, checked, onToggle, children }: {
   index: number; label: string; checked: boolean; onToggle: () => void; children?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(index === 0);
-
   return (
-    <div className={`border rounded transition-all ${checked ? "border-[#00ff41]/20 bg-[#00ff41]/[0.02]" : "border-white/5"}`}>
-      <button onClick={() => { setOpen(!open); }} className="w-full flex items-center gap-3 px-3 py-2.5 text-left">
-        <button onClick={(e) => { e.stopPropagation(); onToggle(); }}
-          className="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-all"
-          style={{ borderColor: checked ? "#00ff41" : "rgba(255,255,255,0.2)", background: checked ? "#00ff41" : "transparent" }}>
-          {checked && <span className="text-black text-[8px] font-black">✓</span>}
+    <div style={{ border: `1px solid ${checked ? "rgba(63,185,80,0.25)" : "var(--border-subtle)"}`, borderRadius: 8, overflow: "hidden", background: checked ? "rgba(63,185,80,0.04)" : "transparent", transition: "all 0.2s" }}>
+      <button onClick={() => setOpen(!open)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}>
+        <button onClick={e => { e.stopPropagation(); onToggle(); }} style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${checked ? "var(--color-success)" : "var(--border-strong)"}`, background: checked ? "var(--color-success)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: "pointer", transition: "all 0.15s" }}>
+          {checked && <span style={{ fontSize: 10, color: "#000", fontWeight: 700 }}>✓</span>}
         </button>
-        <span className={`text-[10px] font-bold tracking-wide flex-1 ${checked ? "text-[#00ff41]/70 line-through" : "text-white/60"}`}>
-          {String(index + 1).padStart(2, "0")} — {label.toUpperCase()}
+        <span style={{ fontSize: 13, fontWeight: 500, color: checked ? "var(--text-secondary)" : "var(--text-primary)", flex: 1, textDecoration: checked ? "line-through" : "none" }}>
+          {String(index + 1).padStart(2, "0")}. {label}
         </span>
-        <span className="text-white/20 text-[10px]">{open ? "▲" : "▼"}</span>
+        <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{open ? "▲" : "▼"}</span>
       </button>
-      {open && <div className="px-3 pb-3">{children}</div>}
+      {open && <div style={{ padding: "0 12px 12px" }}>{children}</div>}
     </div>
   );
 }
 
-// ── CopyButton ────────────────────────────────────────────────────────────────
+// ── CopyBtn ───────────────────────────────────────────────────────────────────
 
-function CopyButton({ text, label, copiedKey, copied, onCopy }: {
-  text: string; label: string; copiedKey: string;
-  copied: string | null; onCopy: (t: string, k: string) => void;
-}) {
-  const isCopied = copied === copiedKey;
+function CopyBtn({ text, label, k, copied, onCopy }: { text: string; label: string; k: string; copied: string | null; onCopy: (t: string, k: string) => void }) {
+  const isCopied = copied === k;
   return (
-    <button onClick={() => onCopy(text, copiedKey)}
-      className="mt-2 px-3 py-1.5 text-[9px] font-black rounded border transition-all"
-      style={{ borderColor: isCopied ? "#00ff41" : "rgba(255,255,255,0.1)", color: isCopied ? "#00ff41" : "rgba(255,255,255,0.4)" }}>
-      {isCopied ? "COPIED ✓" : label}
+    <button onClick={() => onCopy(text, k)} style={{ ...btnGhost, fontSize: 12, color: isCopied ? "var(--color-success)" : "var(--text-secondary)", borderColor: isCopied ? "rgba(63,185,80,0.3)" : "var(--border-default)" }}>
+      {isCopied ? "Copied ✓" : label}
     </button>
   );
 }
 
-// ── SignalPanel ───────────────────────────────────────────────────────────────
+// ── OutreachBlock ─────────────────────────────────────────────────────────────
 
-function SignalPanel({ status, lastIngested }: { status: AgentStatus | null; lastIngested?: string }) {
+function OutreachBlock({ title, text, copyKey, copied, onCopy, fullText }: { title: string; text: string; copyKey: string; copied: string | null; onCopy: (t: string, k: string) => void; fullText?: string }) {
   return (
-    <div className="border border-white/5 rounded bg-white/[0.01] p-4 space-y-4">
-      <span className="text-[9px] tracking-[0.3em] text-white/20">SIGNAL PANEL // AGENT TELEMETRY</span>
-      <div className="grid grid-cols-3 gap-4">
-        <StatBlock label="AI ENGINE" value={status?.aiReady ? "ONLINE" : "OFFLINE"} color={status?.aiReady ? "#00ff41" : "#ff2d2d"} />
-        <StatBlock label="LAST INGEST" value={formatTime(lastIngested)} color="#00f5ff" />
-        <StatBlock label="PIPELINE" value={`${status?.pipeline.total ?? 0} OPS`} color="#ffa500" />
-      </div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[9px]">
-        {[["SYNTHESIZED", status?.pipeline.tailored, "#ffa500"], ["DEPLOYED", status?.pipeline.applied, "#00ff41"],
-          ["QUEUED", status?.pipeline.queued, "#ff2d2d"], ["ACTIVE", status?.pipeline.suggested, "#00f5ff"]].map(([l, v, c]) => (
-          <div key={l as string} className="flex justify-between text-white/20">
-            <span>{l as string}</span><span style={{ color: c as string }}>{v as number ?? 0}</span>
+    <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 8, padding: 12 }}>
+      <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{title}</p>
+      <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{text}</p>
+      <CopyBtn text={fullText ?? text} label="Copy" k={copyKey} copied={copied} onCopy={onCopy} />
+    </div>
+  );
+}
+
+// ── StatsCard ─────────────────────────────────────────────────────────────────
+
+function StatsCard({ status }: { status: AgentStatus | null }) {
+  return (
+    <div style={card}>
+      <p style={{ margin: "0 0 12px", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-tertiary)" }}>Pipeline</p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        {[
+          ["Total", status?.pipeline.total ?? 0, "var(--text-primary)"],
+          ["Active", status?.pipeline.suggested ?? 0, "var(--accent)"],
+          ["Synthesized", status?.pipeline.tailored ?? 0, "var(--color-high)"],
+          ["Applied", status?.pipeline.applied ?? 0, "var(--color-success)"],
+        ].map(([label, val, color]) => (
+          <div key={label as string} style={{ background: "var(--bg-surface)", borderRadius: 8, padding: "10px 12px", border: "1px solid var(--border-subtle)" }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: color as string, lineHeight: 1 }}>{val as number}</div>
+            <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 4 }}>{label as string}</div>
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-function StatBlock({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <div className="text-center">
-      <div className="text-[8px] text-white/20 mb-1">{label}</div>
-      <div className="text-sm font-black tabular-nums" style={{ color, textShadow: `0 0 8px ${color}60` }}>{value}</div>
-    </div>
-  );
-}
-
-// ── MissionDetail ─────────────────────────────────────────────────────────────
-
-function MissionDetail({ job, isTailoring, onTailor }: { job: Job; isTailoring: boolean; onTailor: () => void }) {
-  return (
-    <div className="border border-white/5 rounded bg-white/[0.01] p-4 space-y-3">
-      <span className="text-[9px] tracking-[0.3em] text-white/20">MISSION BRIEF</span>
-      <div>
-        <h3 className="font-black text-white">{job.title}</h3>
-        <p className="text-[11px] text-[#00f5ff]/60">{job.company} // {job.location}</p>
-      </div>
-      <p className="text-[11px] text-white/30 leading-relaxed line-clamp-5">{job.description}</p>
-      {job.matchReason && <p className="text-[10px] text-[#00f5ff]/50 italic border-l-2 border-[#00f5ff]/20 pl-3">{job.matchReason}</p>}
-      <button onClick={onTailor} disabled={isTailoring}
-        className="w-full py-3 text-[10px] font-black tracking-widest rounded transition-all"
-        style={{ background: isTailoring ? "transparent" : "linear-gradient(135deg,#00f5ff,#00d4ff)", color: isTailoring ? "#00f5ff" : "#000", border: isTailoring ? "1px solid rgba(0,245,255,0.3)" : "none" }}>
-        {isTailoring ? "SYNTHESIZING..." : "SYNTHESIZE CV + COVER LETTER [T]"}
-      </button>
-      <div className="flex gap-2">
-        {job.url && <a href={job.url} target="_blank" rel="noopener noreferrer" className="text-[9px] text-white/20 hover:text-white/50 border border-white/5 px-2 py-1 rounded transition-colors">VIEW POSTING ↗</a>}
-        <a href={`/api/agent/export/${job.id}?format=markdown`} download className="text-[9px] text-white/20 hover:text-white/50 border border-white/5 px-2 py-1 rounded transition-colors">EXPORT MD ↓</a>
       </div>
     </div>
   );
@@ -553,39 +626,65 @@ function MissionDetail({ job, isTailoring, onTailor }: { job: Job; isTailoring: 
 // ── ApiKeyPanel ───────────────────────────────────────────────────────────────
 
 function ApiKeyPanel({ apiKey, onSave }: { apiKey: string; onSave: (k: string) => void }) {
-  const [input, setInput] = React.useState(apiKey);
-  const [saved, setSaved] = React.useState(false);
+  const [input, setInput] = useState(apiKey);
+  const [saved, setSaved] = useState(false);
   const save = () => { onSave(input.trim()); setSaved(true); setTimeout(() => setSaved(false), 2000); };
   return (
-    <div className="border border-white/5 rounded bg-white/[0.01] p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-[9px] tracking-[0.3em] text-white/20">OPERATOR API KEY</span>
-        <span className="text-[8px] text-white/10">BYOK — your credits only</span>
+    <div style={card}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <p style={{ margin: 0, fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-tertiary)" }}>Gemini API Key</p>
+        <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>BYOK · your credits</span>
       </div>
-      <div className="flex gap-2">
-        <input type="password" placeholder="AIzaSy..." value={input}
-          onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()}
-          className="flex-1 bg-black border border-white/10 rounded px-3 py-2 text-[10px] text-white/60 placeholder:text-white/15 focus:outline-none focus:border-[#00f5ff]/30" />
-        <button onClick={save} className="px-3 py-2 text-[9px] font-black border rounded transition-all"
-          style={{ borderColor: saved ? "#00ff41" : "rgba(0,245,255,0.2)", color: saved ? "#00ff41" : "#00f5ff" }}>
-          {saved ? "✓" : "SET"}
+      <div style={{ display: "flex", gap: 8 }}>
+        <input type="password" placeholder="AIzaSy…" value={input}
+          onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && save()}
+          style={{ flex: 1, background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "var(--text-primary)", outline: "none", fontFamily: "inherit" }} />
+        <button onClick={save} style={{ ...btnPrimary, width: "auto", padding: "8px 16px", background: saved ? "var(--color-success)" : "var(--accent)" }}>
+          {saved ? "Saved" : "Set"}
         </button>
       </div>
-      <p className="text-[8px] text-white/15">Get free key at <span className="text-white/30">aistudio.google.com</span> · Stored locally</p>
+      <p style={{ margin: "8px 0 0", fontSize: 11, color: "var(--text-tertiary)" }}>
+        Free key at <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" style={{ color: "var(--text-link)", textDecoration: "none" }}>aistudio.google.com</a>
+         · Stored locally only
+      </p>
     </div>
   );
 }
 
-// ── EmptyDetail ───────────────────────────────────────────────────────────────
+// ── ActivityLog ───────────────────────────────────────────────────────────────
 
-function EmptyDetail() {
+function ActivityLog({ logs }: { logs: AgentLog[] }) {
+  if (logs.length === 0) return null;
   return (
-    <div className="border border-dashed border-white/5 rounded flex flex-col items-center justify-center p-8 gap-3 text-center">
-      <div className="w-10 h-10 rounded border border-white/10 flex items-center justify-center">
-        <span className="text-white/10 text-lg">?</span>
+    <div style={card}>
+      <p style={{ margin: "0 0 12px", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-tertiary)" }}>Recent Activity</p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {logs.slice(0, 8).map((log, i) => (
+          <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <span style={{ fontSize: 11, color: "var(--text-tertiary)", whiteSpace: "nowrap", paddingTop: 1, fontFamily: "'JetBrains Mono', monospace" }}>{formatTime(log.timestamp)}</span>
+            <span style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.4 }}>
+              <span style={{ color: "var(--accent)", fontWeight: 500 }}>{log.action}  </span>
+              {log.detail}
+            </span>
+          </div>
+        ))}
       </div>
-      <p className="text-[9px] text-white/15 leading-relaxed tracking-wide">SELECT A MISSION TARGET<br />TO VIEW BRIEF + EXECUTE</p>
-      <p className="text-[8px] text-white/10">OR POST TO /api/agent/ingest</p>
+    </div>
+  );
+}
+
+// ── EmptyState ────────────────────────────────────────────────────────────────
+
+function EmptyState() {
+  return (
+    <div style={{ ...card, textAlign: "center", padding: 32 }}>
+      <div style={{ width: 40, height: 40, borderRadius: 10, background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", margin: "0 auto 12px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
+        ✦
+      </div>
+      <p style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Select an opportunity</p>
+      <p style={{ margin: 0, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+        Click any job to view details and<br />synthesize a tailored application
+      </p>
     </div>
   );
 }
