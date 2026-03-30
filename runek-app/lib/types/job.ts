@@ -15,6 +15,9 @@ export interface Job {
   category: 'AI' | 'Robotics' | 'Energy' | 'Space' | 'General';
   ingestedBy?: string;       // 'dashboard' | 'api-agent' | 'n8n' | etc
   tailoredAt?: string;
+  appliedAt?: string;
+  notes?: string;
+  followUpDate?: string;
 }
 
 export interface TailoredContent {
