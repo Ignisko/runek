@@ -1,18 +1,25 @@
-# Runek | Autonomous Career Agent (MVP)
+# Runek | Autonomous Career Agent
 
-Runek is open-source and built for the "Day 0" manual-to-automated pivot. Built by Ignacy Januszek & Antigravity AI.
+Runek is a "Local-First" AI agent that automates your job hunt. It finds, scores, and applies to jobs autonomously, keeping all your data private on your own machine.
 
-Runek is a "Local-First" AI agent designed to automate the most tedious parts of job hunting. It doesn't just find jobs; it scores them, synthesizes tailored outreach, and can even apply on your behalf.
+[![Download Runek](https://img.shields.io/badge/Download-Latest_Release-blue?style=for-the-badge&logo=github)](https://github.com/Ignisko/runek/archive/refs/heads/main.zip)
 
-## 🚀 One-Click Launch
-Runek is designed to be simple. No cloud database, no complex setup.
-1. **Download** the repository.
-2. **Double-click `Start-Runek.bat`**.
-3. The dashboard will automatically open at `http://localhost:3000`.
+![Runek Dashboard](./assets/dashboard.png)
+
+## ⚡ Quick Start
+1. **Download**: Click the button above to download the latest source code.
+2. **Launch**:
+   - **Windows**: Double-click `Start-Runek.bat`
+   - **Mac/Linux**: Run `bash start-runek.sh` in your terminal.
+3. **Go**: The dashboard will open automatically at `http://localhost:3000`.
 
 ## ✦ Key Features
-- **Autonomous Autopilot**: A Playwright-powered agent that sweeps job boards (JustJoinIT) and applies to roles matching your profile.
-- **Match Ranking**: Every job is scored (0-100) based on your unique skills, sector preferences, and relocation status.
-- **Live Mission Feed**: Watch the agent work in real-time. See every click and decision it makes in the dashboard.
-- **The Prophet (Synthesis)**: Generate tailored CV summaries and outreach messages in seconds using Qwen or OpenAI.
-- **Zero Friction**: No login. No database. Everything stays on your machine in the `userdata/` folder.
+- **Autopilot**: Playwright-powered agent that handles application forms for you.
+- **Match Scoring**: Roles are ranked (0-100) based on your custom profile criteria.
+- **Mission Setup**: Configure your Country, Job Title, and Skills in the **Profile** tab.
+- **Zero Friction**: No setup, no login, no database. Just clean automation.
+- **Privacy First**: All your personal data (CV, API keys, profile) is stored in the `userdata/` folder, which is automatically ignored by Git and never leaves your machine.
+
+## 📄 Documentation
+For details on the engine, safety modes, and advanced configuration:
+👉 **[Full Documentation](./project-documentation/feature-runek-autopilot.md)**

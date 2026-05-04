@@ -14,6 +14,7 @@ export interface CandidateProfile {
   openToRelocation: boolean;
   preferredHubs: string[];
   remoteOk: boolean;
+  visaRequirement: string;
   sectorWeights: Record<string, number>;
   signals: ProfileSignal[];
   antiSignals: string[];
@@ -26,7 +27,7 @@ export class ProfileStore {
   private profileCache: CandidateProfile | null = null;
 
   private constructor() {
-    this.filePath = path.join(process.cwd(), 'lib/data/profile.json');
+    this.filePath = path.join(process.cwd(), 'userdata/profile.json');
   }
 
   public static getInstance(): ProfileStore {
@@ -62,6 +63,7 @@ export class ProfileStore {
       openToRelocation: true,
       preferredHubs: [],
       remoteOk: true,
+      visaRequirement: 'No sponsorship needed',
       sectorWeights: {},
       signals: [],
       antiSignals: [],

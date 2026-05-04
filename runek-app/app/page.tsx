@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Job, AgentLog, AgentStatus, TailoredContent } from "../lib/types/job";
+import { auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged, User, syncProfileToCloud, getProfileFromCloud, syncJobToCloud } from "../lib/services/firebase";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -73,6 +74,11 @@ export default function Home() {
   const [viewMode, setViewMode] = useState<Job["status"] | "all">("open");
   const [scrapeKeyword, setScrapeKeyword] = useState("product manager");
   const [missionLogs, setMissionLogs] = useState<{ timestamp: string; action: string; message: string }[]>([]);
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    return onAuthStateChanged(auth, (u) => setUser(u));
+  }, []);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -90,6 +96,20 @@ export default function Home() {
       if (d.ok) setMissionLogs(d.data);
     } catch (e) {}
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      getProfileFromCloud(user.uid).then(cloudProfile => {
+        if (cloudProfile) {
+          fetch('/api/agent/profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cloudProfile)
+          }).then(() => fetchAll());
+        }
+      });
+    }
+  }, [user, fetchAll]);
 
   useEffect(() => {
     fetchAll();
@@ -190,7 +210,17 @@ export default function Home() {
   };
 
   const handleStatusUpdate = async (jobId: string, newStatus: Job["status"]) => {
+    // Update Local Backend
     await fetch(`/api/agent/jobs/${jobId}`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify({ status: newStatus }) });
+    
+    // Sync to Cloud if Logged In
+    if (user) {
+      const job = jobs.find(j => j.id === jobId);
+      if (job) {
+        try { await syncJobToCloud(user.uid, { ...job, status: newStatus }); } catch (e) { console.error("Cloud job sync failed:", e); }
+      }
+    }
+
     fetchAll();
   };
 
@@ -279,11 +309,6 @@ export default function Home() {
               </button>
             </div>
             
-            <div style={{ height: 24, width: 1, background: "var(--border-subtle)", margin: "0 4px" }} />
-            
-            <button onClick={handleBatchTailor} disabled={isBatching} style={{ background: isBatching ? "var(--bg-hover)" : "transparent", color: "var(--blue-bright)", border: "1px solid var(--border-subtle)", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: isBatching ? "not-allowed" : "pointer", fontFamily: "'Space Grotesk', sans-serif", transition: "all 0.2s" }}>
-              {isBatching ? "Synthesizing..." : "✦ Auto-Synthesize All"}
-            </button>
             <button onClick={() => setShowSettings(true)} style={{ background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}>
               Profile
             </button>
@@ -367,7 +392,7 @@ export default function Home() {
           {missionLogs.length > 0 && <MissionLogPanel logs={missionLogs} />}
         </div>
       </div>
-      <SettingsModal show={showSettings} onClose={() => setShowSettings(false)} />
+      <SettingsModal show={showSettings} onClose={() => setShowSettings(false)} user={user} />
     </div>
   );
 }
@@ -680,7 +705,7 @@ function CheckStep({ index, label, checked, onToggle, children }: { index: numbe
   const [open, setOpen] = useState(index === 0);
   return (
     <div style={{ border: `1px solid ${checked ? "rgba(74,222,128,0.2)" : "var(--border-subtle)"}`, borderRadius: 9, background: checked ? "rgba(74,222,128,0.04)" : "transparent", transition: "all 0.2s", overflow: "hidden" }}>
-      <button onClick={() => setOpen(!open)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", background: "transparent", border: "none", cursor: "pointer" }}>
+      <div onClick={() => setOpen(!open)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", background: "transparent", border: "none", cursor: "pointer" }}>
         <button onClick={e => { e.stopPropagation(); onToggle(); }} style={{ width: 20, height: 20, borderRadius: 6, border: `1.5px solid ${checked ? "#4ade80" : "var(--border-strong)"}`, background: checked ? "#4ade80" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, transition: "all 0.15s" }}>
           {checked && <span style={{ fontSize: 11, color: "#000", fontWeight: 800 }}>✓</span>}
         </button>
@@ -688,7 +713,7 @@ function CheckStep({ index, label, checked, onToggle, children }: { index: numbe
           {String(index + 1).padStart(2, "0")}. {label}
         </span>
         <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{open ? "▲" : "▼"}</span>
-      </button>
+      </div>
       {open && <div style={{ padding: "0 14px 14px" }}>{children}</div>}
     </div>
   );
@@ -755,12 +780,33 @@ function EmptyState() {
 
 // ── SettingsModal ─────────────────────────────────────────────────────────────
 
-function SettingsModal({ show, onClose }: { show: boolean; onClose: () => void }) {
+function SettingsModal({ show, onClose, user }: { show: boolean; onClose: () => void; user: User | null }) {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [apiKey, setApiKey] = useState("");
+
+  const handleGoogleLogin = async () => {
+    try { await signInWithPopup(auth, googleProvider); } catch (e) { console.error(e); }
+  };
+
+  const handleSignOut = async () => {
+    try { await signOut(auth); } catch (e) { console.error(e); }
+  };
+
+  const handleCvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      await fetch("/api/agent/upload-cv", { method: "POST", body: formData });
+      alert("CV Uploaded Successfully");
+    } catch (err) { console.error(err); }
+    setUploading(false);
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -784,14 +830,22 @@ function SettingsModal({ show, onClose }: { show: boolean; onClose: () => void }
     setSaving(true);
     localStorage.setItem('runek_api_key', apiKey);
     localStorage.setItem('runek_profile_set', 'true');
+    
+    // Local Save
     await fetch('/api/agent/profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(profile)
     });
+
+    // Cloud Save
+    if (user) {
+      try { await syncProfileToCloud(user.uid, profile); } catch (e) { console.error("Cloud sync failed:", e); }
+    }
+
     setSaving(false);
     onClose();
-    window.location.reload(); // Reload to refresh everything with new profile
+    window.location.reload();
   };
 
   return (
@@ -817,11 +871,21 @@ function SettingsModal({ show, onClose }: { show: boolean; onClose: () => void }
               </div>
             </div>
 
-            <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 6, textTransform: "uppercase" }}>Home Base / Region</label>
-              <input value={profile.location} onChange={e => setProfile({...profile, location: e.target.value})} style={{ width: "100%", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", color: "#fff", padding: "10px", borderRadius: 8, fontSize: 14 }} />
+            <div style={{ display: "flex", gap: 16 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 6, textTransform: "uppercase" }}>Target Region / Areas</label>
+                <input value={profile.preferredHubs?.join(", ")} onChange={e => setProfile({...profile, preferredHubs: e.target.value.split(",").map(s => s.trim())})} placeholder="e.g. Warsaw, Berlin, Remote" style={{ width: "100%", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", color: "#fff", padding: "10px", borderRadius: 8, fontSize: 14 }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 6, textTransform: "uppercase" }}>Visa Status</label>
+                <input value={profile.visaRequirement} onChange={e => setProfile({...profile, visaRequirement: e.target.value})} placeholder="e.g. EU Citizen / Needs Sponsorship" style={{ width: "100%", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", color: "#fff", padding: "10px", borderRadius: 8, fontSize: 14 }} />
+              </div>
             </div>
 
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 6, textTransform: "uppercase" }}>Additional Skills / Tech Stack</label>
+              <input value={profile.signals?.map(s => s.skill).join(", ")} onChange={e => setProfile({...profile, signals: e.target.value.split(",").map(s => ({ skill: s.trim(), weight: 1.0 }))})} placeholder="e.g. React, Python, Product Strategy" style={{ width: "100%", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", color: "#fff", padding: "10px", borderRadius: 8, fontSize: 14 }} />
+            </div>
             <div>
               <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 6, textTransform: "uppercase" }}>Qwen / OpenAI API Key (Optional)</label>
               <input 
@@ -859,6 +923,28 @@ function SettingsModal({ show, onClose }: { show: boolean; onClose: () => void }
                 onChange={e => setProfile({...profile, baseCV: e.target.value})} 
                 style={{ width: "100%", height: 250, background: "var(--bg-surface)", border: "1px solid var(--border-strong)", color: "var(--text-secondary)", padding: "14px", borderRadius: 8, fontSize: 13, fontFamily: "'JetBrains Mono', monospace", resize: "vertical" }} 
               />
+            </div>
+            
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 12, textTransform: "uppercase" }}>Cloud Sync (Firebase)</label>
+              <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border-subtle)", borderRadius: 10, padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: user ? "var(--blue-core)" : "var(--bg-surface)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                    {user?.photoURL ? <img src={user.photoURL} alt="p" style={{ width: "100%" }} /> : <span style={{ fontSize: 14 }}>☁️</span>}
+                  </div>
+                  <div>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>{user ? user.displayName : "Cloud Sync Offline"}</p>
+                    <p style={{ margin: 0, fontSize: 11, color: "var(--text-tertiary)" }}>{user ? "Your data is backed up to Firestore" : "Sign in to sync profile and application history"}</p>
+                  </div>
+                </div>
+                {user ? (
+                  <button onClick={handleSignOut} style={{ background: "transparent", color: "#ff6b6b", border: "1px solid rgba(255,107,107,0.2)", borderRadius: 6, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Sign Out</button>
+                ) : (
+                  <button onClick={handleGoogleLogin} style={{ background: "#fff", color: "#000", border: "none", borderRadius: 6, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
+                    <span>Sign in with Google</span>
+                  </button>
+                )}
+              </div>
             </div>
             
             <button onClick={handleSave} disabled={saving} style={{ alignSelf: "flex-end", background: "var(--blue-core)", color: "#fff", border: "none", borderRadius: 8, padding: "12px 32px", fontSize: 14, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>

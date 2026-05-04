@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { JustJoinScraper } from '../../../../lib/services/scraper-service';
+import { ScraperRegistry } from '../../../../lib/services/scraper-service';
 import { pipelineStore } from '../../../../lib/services/pipeline-store';
 import { matchEngine } from '../../../../lib/services/match-engine';
 
@@ -7,9 +7,9 @@ export async function POST(request: Request) {
   try {
     const { keywords = 'product', count = 30 } = await request.json();
     
-    pipelineStore.log('SCRAPE', `Starting JustJoinIT scrape for: ${keywords}...`);
+    pipelineStore.log('SCRAPE', `Starting Multi-Source scrape for: ${keywords}...`);
     
-    const rawJobs = await JustJoinScraper.fetchJobs(keywords, count);
+    const rawJobs = await ScraperRegistry.fetchAll(keywords, count);
     let newJobsCount = 0;
 
     for (const rawJob of rawJobs) {
