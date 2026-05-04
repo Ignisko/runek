@@ -7,7 +7,7 @@ export interface Job {
   url: string;
   source: string; // open string — can be 'Wellfound' | 'custom-agent' | 'n8n' | etc
   postedAt: string;
-  status: 'open' | 'applied' | 'discarded';
+  status: 'open' | 'synthesized' | 'applied' | 'interviewing' | 'offer_received' | 'accepted' | 'rejected' | 'no_answer' | 'discarded';
   matchScore: number;
   matchReason?: string;      // brief LLM/engine explanation of why it fits
   matchSignals?: string[];   // e.g. ["Systems PM", "AUV", "Warsaw relocation"]

@@ -400,7 +400,7 @@ export default function Home() {
 // ── JobCard ───────────────────────────────────────────────────────────────────
 
 function JobCard({ job, isSelected, isTailoring, onClick, onTailor, onOpen, onApplied, onDiscard, onNotes, onStatusChange }: 
-  { job: Job, isSelected: boolean, isTailoring: boolean, onClick: () => void, onTailor: () => void, onOpen: () => void, onApplied: () => void, onDiscard: () => void, onNotes: (n: string) => void, onStatusChange?: (s: string) => void }) {
+  { job: Job, isSelected: boolean, isTailoring: boolean, onClick: () => void, onTailor: () => void, onOpen: () => void, onApplied: () => void, onDiscard: () => void, onNotes: (n: string) => void, onStatusChange?: (s: Job["status"]) => void }) {
   const grade = scoreGrade(job.matchScore);
   const [noteVal, setNoteVal] = useState(job.notes ?? "");
   const [noteSaved, setNoteSaved] = useState(false);
@@ -544,7 +544,7 @@ function JobCard({ job, isSelected, isTailoring, onClick, onTailor, onOpen, onAp
                  <span style={{ fontSize: 11, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>Status</span>
                  <select 
                    value={job.status} 
-                   onChange={e => { e.stopPropagation(); onStatusChange(e.target.value); }} 
+                   onChange={e => { e.stopPropagation(); onStatusChange(e.target.value as Job["status"]); }} 
                    style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", borderRadius: 6, padding: "4px 8px", fontSize: 12, outline: "none", cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
                    {["open", "synthesized", "applied", "interviewing", "offer_received", "accepted", "rejected", "no_answer", "discarded"].map(s => <option key={s} value={s} style={{ textTransform: "capitalize" }}>{s.replace("_", " ")}</option>)}
                  </select>
