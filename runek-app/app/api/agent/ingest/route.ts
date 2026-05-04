@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       priority: match.priority,
       matchReason: match.summary,
       matchSignals: match.signals,
-      status: match.score >= 55 ? 'suggested' : 'queued',
+      status: 'open',
     });
 
     pipelineStore.log('MATCH', `Scored ${match.score}/100 → ${match.priority}`, job.id);
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
           jobId: job.id,
           matchScore: match.score,
           priority: match.priority,
-          status: match.score >= 55 ? 'suggested' : 'queued',
+          status: 'open',
           signals: match.signals,
           summary: match.summary,
         },

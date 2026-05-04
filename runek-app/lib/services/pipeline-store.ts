@@ -1,26 +1,47 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { Job, AgentLog } from '../types/job';
-import initialJobs from '../data/jobs.json';
+
+const DATA_PATH = path.join(process.cwd(), 'lib', 'data', 'jobs.json');
 
 /**
- * PipelineStore — In-memory job pipeline with append-only agent log.
+ * PipelineStore — File-persisted job pipeline with append-only agent log.
  * Singleton pattern ensures one store across all Next.js API routes.
- * Swap the internal Map for Redis/Vercel KV with zero API surface change.
  */
-
 class PipelineStore {
   private jobs: Map<string, Job> = new Map();
   private logs: AgentLog[] = [];
   private lastIngest?: string;
 
   constructor() {
-    this.seed();
+    this.load();
   }
 
-  private seed() {
-    (initialJobs as Job[]).forEach(job => {
-      this.jobs.set(job.id, { ...job, priority: job.priority || 'medium' });
-    });
-    this.log('SYSTEM', 'Pipeline store initialized', undefined, `Seeded ${this.jobs.size} jobs`);
+  private load() {
+    try {
+      if (fs.existsSync(DATA_PATH)) {
+        const data = fs.readFileSync(DATA_PATH, 'utf-8');
+        const jobsArray = JSON.parse(data) as Job[];
+        jobsArray.forEach(job => {
+          this.jobs.set(job.id, { ...job, priority: job.priority || 'medium' });
+        });
+        this.log('SYSTEM', 'Pipeline store loaded from disk', undefined, `Loaded ${this.jobs.size} jobs`);
+      } else {
+        this.log('SYSTEM', 'No existing data found, starting fresh');
+      }
+    } catch (error) {
+      console.error('[PipelineStore] Load error:', error);
+      this.log('SYSTEM', 'Error loading data, starting fresh');
+    }
+  }
+
+  private persist() {
+    try {
+      const jobsArray = Array.from(this.jobs.values());
+      fs.writeFileSync(DATA_PATH, JSON.stringify(jobsArray, null, 2), 'utf-8');
+    } catch (error) {
+      console.error('[PipelineStore] Persist error:', error);
+    }
   }
 
   // ── Read ────────────────────────────────────────────────────────────────
@@ -41,11 +62,9 @@ class PipelineStore {
     const all = this.getAll();
     return {
       total: all.length,
-      queued: all.filter(j => j.status === 'queued').length,
-      suggested: all.filter(j => j.status === 'suggested').length,
-      tailored: all.filter(j => j.status === 'tailored').length,
+      open: all.filter(j => j.status === 'open').length,
       applied: all.filter(j => j.status === 'applied').length,
-      discarded: all.filter(j => j.status === 'discarded').length,
+      archived: all.filter(j => j.status === 'discarded').length,
     };
   }
 
@@ -57,7 +76,7 @@ class PipelineStore {
       ...jobData,
       id,
       postedAt: new Date().toISOString(),
-      status: 'queued',
+      status: 'open',
       matchScore: 0,
       priority: 'medium',
       ingestedBy: jobData.ingestedBy || 'api-agent',
@@ -65,6 +84,7 @@ class PipelineStore {
     this.jobs.set(id, job);
     this.lastIngest = new Date().toISOString();
     this.log('INGEST', `Job ingested: ${job.title} @ ${job.company}`, id);
+    this.persist();
     return job;
   }
 
@@ -73,6 +93,7 @@ class PipelineStore {
     if (!existing) return null;
     const updated = { ...existing, ...patch };
     this.jobs.set(id, updated);
+    this.persist();
     return updated;
   }
 
@@ -112,3 +133,4 @@ declare global {
 
 export const pipelineStore: PipelineStore =
   globalThis.__pipelineStore ?? (globalThis.__pipelineStore = new PipelineStore());
+

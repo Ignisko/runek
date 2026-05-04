@@ -1,24 +1,19 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Job, AgentLog, AgentStatus, TailoredContent } from "../lib/types/job";
 
-// ── Token helpers ─────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-function priorityColor(p: Job["priority"]) {
-  return {
-    critical: "var(--color-critical)",
-    high:     "var(--color-high)",
-    medium:   "var(--color-medium)",
-    low:      "var(--color-low)",
-  }[p] ?? "var(--color-low)";
+function scoreGrade(s: number): { color: string; bg: string; label: string; glow: string } {
+  if (s >= 88) return { color: "#ff6b6b", bg: "rgba(255,107,107,0.12)", label: "S", glow: "0 0 12px rgba(255,107,107,0.4)" };
+  if (s >= 75) return { color: "#ffb347", bg: "rgba(255,179,71,0.12)", label: "A", glow: "0 0 12px rgba(255,179,71,0.3)" };
+  if (s >= 55) return { color: "#4f8fff", bg: "rgba(79,143,255,0.12)", label: "B", glow: "0 0 12px rgba(79,143,255,0.35)" };
+  return { color: "#3d5a7a", bg: "rgba(61,90,122,0.15)", label: "C", glow: "none" };
 }
 
-function scoreBadge(score: number) {
-  if (score >= 88) return { bg: "rgba(248,81,73,0.12)", color: "var(--color-critical)", label: "Critical" };
-  if (score >= 75) return { bg: "rgba(210,153,34,0.12)", color: "var(--color-high)", label: "High" };
-  if (score >= 55) return { bg: "rgba(56,139,253,0.12)", color: "var(--color-medium)", label: "Medium" };
-  return { bg: "rgba(72,79,88,0.2)", color: "var(--color-low)", label: "Low" };
+function priorityColor(p: Job["priority"]) {
+  return { critical: "#ff6b6b", high: "#ffb347", medium: "#4f8fff", low: "#3d5a7a" }[p] ?? "#3d5a7a";
 }
 
 function formatTime(iso?: string) {
@@ -44,38 +39,19 @@ interface OutreachDraft {
   mock?: boolean;
 }
 
-// ── Shared styles ─────────────────────────────────────────────────────────────
+// ── Shared style tokens ───────────────────────────────────────────────────────
 
-const card: React.CSSProperties = {
+const glass: React.CSSProperties = {
   background: "var(--bg-card)",
   border: "1px solid var(--border-subtle)",
-  borderRadius: 10,
-  padding: "16px",
+  borderRadius: 12,
+  padding: 20,
+  backdropFilter: "blur(12px)",
 };
 
-const btnPrimary: React.CSSProperties = {
-  background: "var(--accent)",
-  color: "#fff",
-  border: "none",
-  borderRadius: 8,
-  padding: "10px 16px",
-  fontSize: 13,
-  fontWeight: 600,
-  cursor: "pointer",
-  width: "100%",
-  transition: "opacity 0.15s",
-};
-
-const btnGhost: React.CSSProperties = {
-  background: "transparent",
-  color: "var(--text-secondary)",
-  border: "1px solid var(--border-default)",
-  borderRadius: 8,
-  padding: "8px 12px",
-  fontSize: 12,
-  fontWeight: 500,
-  cursor: "pointer",
-  transition: "all 0.15s",
+const glassHover: React.CSSProperties = {
+  ...glass,
+  borderColor: "var(--border-default)",
 };
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -83,66 +59,124 @@ const btnGhost: React.CSSProperties = {
 export default function Home() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [logs, setLogs] = useState<AgentLog[]>([]);
-  const [status, setStatus] = useState<AgentStatus | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [tailoring, setTailoring] = useState<string | null>(null);
+  const [isBatching, setIsBatching] = useState(false);
+  const [isScraping, setIsScraping] = useState(false);
+  const [isRunningRunek, setIsRunningRunek] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [tailored, setTailored] = useState<TailoredContent | null>(null);
   const [outreach, setOutreach] = useState<OutreachDraft | null>(null);
   const [outreachLoading, setOutreachLoading] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [apiKey, setApiKey] = useState("");
   const [checklist, setChecklist] = useState<Record<number, boolean>>({});
-
-  useEffect(() => {
-    const k = localStorage.getItem("runek-api-key");
-    if (k) setApiKey(k);
-  }, []);
-
-  const saveApiKey = (key: string) => {
-    setApiKey(key);
-    localStorage.setItem("runek-api-key", key);
-  };
+  const [viewMode, setViewMode] = useState<Job["status"] | "all">("open");
+  const [scrapeKeyword, setScrapeKeyword] = useState("product manager");
+  const [missionLogs, setMissionLogs] = useState<{ timestamp: string; action: string; message: string }[]>([]);
 
   const fetchAll = useCallback(async () => {
     try {
-      const [jr, sr] = await Promise.all([fetch("/api/agent/jobs"), fetch("/api/agent/status")]);
+      const jr = await fetch("/api/agent/jobs");
       const jd = await jr.json();
-      const sd = await sr.json();
       setJobs(jd.data.jobs ?? []);
-      setLogs(jd.data.logs ?? []);
-      setStatus(sd.data ?? null);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  }, []);
+
+  const fetchLogs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/agent/mission-logs");
+      const d = await res.json();
+      if (d.ok) setMissionLogs(d.data);
+    } catch (e) {}
   }, []);
 
   useEffect(() => {
     fetchAll();
-    const i = setInterval(fetchAll, 10000);
+    fetchLogs();
+    const i = setInterval(() => {
+      fetchAll();
+      fetchLogs();
+    }, 2000);
     return () => clearInterval(i);
-  }, [fetchAll]);
+  }, [fetchAll, fetchLogs]);
 
   const authHeaders = (extra?: Record<string, string>) => {
     const h: Record<string, string> = { "Content-Type": "application/json", ...extra };
-    if (apiKey) h["X-Api-Key"] = apiKey;
+    const apiKey = typeof window !== 'undefined' ? localStorage.getItem('runek_api_key') : null;
+    if (apiKey) h['X-Api-Key'] = apiKey;
     return h;
   };
 
+  useEffect(() => {
+    fetch('/api/agent/profile').then(r => r.json()).then(d => {
+      if (d.data && d.data.name === "Ignacy Januszek" && !localStorage.getItem('runek_profile_set')) {
+        setShowSettings(true);
+      }
+    });
+  }, []);
+
   const handleTailor = async (jobId: string) => {
     setTailoring(jobId);
-    setTailored(null);
-    setOutreach(null);
-    setChecklist({});
     try {
       const res = await fetch("/api/agent/tailor", { method: "POST", headers: authHeaders(), body: JSON.stringify({ jobId }) });
       const data = await res.json();
       if (!data.ok) { alert(data.error + (data.hint ? `\n\n${data.hint}` : "")); return; }
       setTailored(data.data);
       fetchAll();
+    } finally { setTailoring(null); }
+  };
+
+  const handleBatchTailor = async () => {
+    setIsBatching(true);
+    // Only synthesize open jobs that aren't already synthesized
+    const openJobs = jobs.filter(j => j.status === "open");
+    for (const job of openJobs) {
+      await handleTailor(job.id);
+    }
+    setIsBatching(false);
+  };
+
+  const handleScrape = async () => {
+    if (!scrapeKeyword.trim()) return alert("Enter keywords to scrape.");
+    setIsScraping(true);
+    try {
+      const res = await fetch("/api/agent/scrape", { 
+        method: "POST", 
+        headers: authHeaders(), 
+        body: JSON.stringify({ keywords: scrapeKeyword, count: 30 }) 
+      });
+      const data = await res.json();
+      if (data.ok) {
+        alert(`Successfully ingested ${data.data.newJobsCount} new jobs!`);
+        fetchAll();
+      } else {
+        alert(`Scrape failed: ${data.error}`);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error triggering scrape.");
     } finally {
-      setTailoring(null);
+      setIsScraping(false);
+    }
+  };
+
+  const handleRunek = async () => {
+    setIsRunningRunek(true);
+    try {
+      const res = await fetch("/api/agent/runek", { method: "POST", headers: authHeaders() });
+      const data = await res.json();
+      if (data.ok) {
+        alert("Runek AI Job Assistant has started applying in the background!");
+        fetchAll();
+      } else {
+        alert(`Failed to start Runek: ${data.error}`);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error triggering Runek.");
+    } finally {
+      setIsRunningRunek(false);
     }
   };
 
@@ -152,18 +186,21 @@ export default function Home() {
       const res = await fetch("/api/agent/outreach", { method: "POST", headers: authHeaders(), body: JSON.stringify({ jobId }) });
       const data = await res.json();
       if (data.ok) setOutreach(data.data);
-    } finally {
-      setOutreachLoading(false);
-    }
+    } finally { setOutreachLoading(false); }
   };
 
   const handleStatusUpdate = async (jobId: string, newStatus: Job["status"]) => {
-    await fetch(`/api/agent/jobs/${jobId}/status`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify({ status: newStatus }) });
+    await fetch(`/api/agent/jobs/${jobId}`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify({ status: newStatus }) });
     fetchAll();
   };
 
   const handleNotes = async (jobId: string, notes: string) => {
-    await fetch(`/api/agent/jobs/${jobId}/notes`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify({ notes }) });
+    await fetch(`/api/agent/jobs/${jobId}`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify({ notes }) });
+  };
+
+  const handleUpdateJob = async (jobId: string, patch: Partial<Job>) => {
+    await fetch(`/api/agent/jobs/${jobId}`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify(patch) });
+    fetchAll();
   };
 
   useEffect(() => {
@@ -178,86 +215,116 @@ export default function Home() {
     return () => window.removeEventListener("keydown", h);
   }, [selected, jobs]);
 
-  const activeMissions = jobs.filter(j => j.status !== "discarded").sort((a, b) => b.matchScore - a.matchScore);
+  const displayJobs = jobs
+    .filter(j => viewMode === "all" ? j.status !== "discarded" : j.status === viewMode)
+    .sort((a, b) => (new Date(b.appliedAt || 0).getTime() || 0) - (new Date(a.appliedAt || 0).getTime() || 0) || b.matchScore - a.matchScore);
   const selectedJob = jobs.find(j => j.id === selected);
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg-base)" }}>
+    <div suppressHydrationWarning style={{ minHeight: "100vh", background: "var(--bg-base)", position: "relative" }}>
+
       {/* ── NAV ── */}
       <header style={{
         borderBottom: "1px solid var(--border-subtle)",
-        background: "var(--bg-surface)",
+        background: "rgba(6,13,24,0.9)",
+        backdropFilter: "blur(20px)",
         position: "sticky", top: 0, zIndex: 50,
       }}>
-        <div style={{ maxWidth: 1440, margin: "0 auto", padding: "0 24px", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          {/* Logo */}
-          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-            <span style={{ fontWeight: 700, fontSize: 18, letterSpacing: "0.1em", color: "var(--text-primary)" }}>
-              Run<span style={{ color: "var(--accent)" }}>ek</span>
-            </span>
-            <span style={{ fontSize: 12, color: "var(--text-tertiary)", borderLeft: "1px solid var(--border-subtle)", paddingLeft: 16 }}>
-              Job Application Engine
-            </span>
+        <div style={{ maxWidth: 1440, margin: "0 auto", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          {/* Brand */}
+          <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 2 }}>
+              <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-primary)" }}>Run</span>
+              <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 22, letterSpacing: "-0.02em", color: "var(--blue-core)" }}>ek</span>
+            </div>
+            <div style={{ height: 16, width: 1, background: "var(--border-subtle)" }} />
+            <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontWeight: 500 }}>Autonomous Career Agent</span>
           </div>
 
-          {/* Status bar */}
-          <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-            {status && (
-              <div style={{ display: "flex", gap: 20, fontSize: 12, color: "var(--text-secondary)" }}>
-                {[
-                  ["Queued", status.pipeline.queued, "var(--text-secondary)"],
-                  ["Active", status.pipeline.suggested, "var(--accent)"],
-                  ["Synthesized", status.pipeline.tailored, "var(--color-high)"],
-                  ["Applied", status.pipeline.applied, "var(--color-success)"],
-                ].map(([label, val, color]) => (
-                  <span key={label as string} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontWeight: 600, color: color as string }}>{val as number}</span>
-                    <span style={{ color: "var(--text-tertiary)" }}>{label as string}</span>
-                  </span>
-                ))}
-              </div>
-            )}
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--color-success)", flexShrink: 0 }} />
-              <span style={{ color: "var(--color-success)", fontWeight: 500 }}>Live</span>
+          {/* Header Actions */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+              <button onClick={handleRunek} disabled={isRunningRunek} style={{ background: isRunningRunek ? "var(--bg-hover)" : "var(--blue-core)", border: "none", borderRadius: 8, padding: "8px 16px", cursor: isRunningRunek ? "not-allowed" : "pointer", transition: "all 0.2s", display: "flex", alignItems: "baseline", gap: 2, boxShadow: isRunningRunek ? "none" : "0 0 12px rgba(79,143,255,0.4)" }}>
+                {isRunningRunek ? (
+                   <span style={{ fontSize: 13, fontWeight: 700, color: "#fff", fontFamily: "'Space Grotesk', sans-serif" }}>Mission Running...</span>
+                ) : (
+                   <>
+                     <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 800, fontSize: 14, letterSpacing: "0.05em", color: "#8ab4f8" }}>AUTOPILOT</span>
+                     <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 800, fontSize: 14, letterSpacing: "0.05em", color: "#ffffff" }}> mode</span>
+                   </>
+                )}
+              </button>
+              {isRunningRunek && missionLogs.length > 0 && (
+                <div style={{ fontSize: 10, color: "var(--blue-bright)", fontWeight: 600, animation: "pulse 2s infinite", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  📡 {missionLogs[0].message}
+                </div>
+              )}
             </div>
+
+            <div style={{ height: 24, width: 1, background: "var(--border-subtle)", margin: "0 4px" }} />
+
+            <div style={{ display: "flex", alignItems: "center", background: "var(--bg-card)", border: "1px solid var(--border-subtle)", borderRadius: 8, padding: "2px 4px" }}>
+              <input 
+                value={scrapeKeyword}
+                onChange={e => setScrapeKeyword(e.target.value)}
+                placeholder="Keywords (e.g. AI PM)"
+                style={{ background: "transparent", border: "none", color: "#fff", padding: "6px 10px", fontSize: 13, outline: "none", width: 160 }}
+              />
+              <button 
+                onClick={handleScrape} 
+                disabled={isScraping} 
+                style={{ background: isScraping ? "var(--bg-hover)" : "var(--blue-core)", color: "#fff", border: "none", borderRadius: 6, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: isScraping ? "not-allowed" : "pointer", fontFamily: "'Space Grotesk', sans-serif", transition: "all 0.2s" }}
+              >
+                {isScraping ? "Scraping..." : "Scrape"}
+              </button>
+            </div>
+            
+            <div style={{ height: 24, width: 1, background: "var(--border-subtle)", margin: "0 4px" }} />
+            
+            <button onClick={handleBatchTailor} disabled={isBatching} style={{ background: isBatching ? "var(--bg-hover)" : "transparent", color: "var(--blue-bright)", border: "1px solid var(--border-subtle)", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: isBatching ? "not-allowed" : "pointer", fontFamily: "'Space Grotesk', sans-serif", transition: "all 0.2s" }}>
+              {isBatching ? "Synthesizing..." : "✦ Auto-Synthesize All"}
+            </button>
+            <button onClick={() => setShowSettings(true)} style={{ background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}>
+              Profile
+            </button>
           </div>
         </div>
       </header>
 
       {/* ── BODY ── */}
-      <div style={{ maxWidth: 1440, margin: "0 auto", padding: "24px 24px", display: "grid", gridTemplateColumns: "1fr 380px", gap: 24 }}>
+      <div style={{ maxWidth: 1440, margin: "0 auto", padding: "28px 28px", display: "grid", gridTemplateColumns: "1fr 400px", gap: 24, alignItems: "start" }}>
 
-        {/* ── LEFT: FEED ── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
-          {/* Feed header */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div>
-              <h1 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>
-                Job Feed
-              </h1>
-              <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--text-secondary)" }}>
-                {activeMissions.length} opportunities · ranked by match
-              </p>
-            </div>
-            <div style={{ fontSize: 11, color: "var(--text-tertiary)", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 6, padding: "6px 12px" }}>
-              <span style={{ color: "var(--text-secondary)" }}>T</span> synthesize &nbsp;
-              <span style={{ color: "var(--text-secondary)" }}>O</span> open &nbsp;
-              <span style={{ color: "var(--text-secondary)" }}>A</span> applied &nbsp;
-              <span style={{ color: "var(--text-secondary)" }}>D</span> discard
-            </div>
+        {/* ── LEFT: JOB FEED ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+          {/* Feed header with Tabs */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 10px", borderBottom: "1px solid var(--border-subtle)", paddingBottom: 16 }}>
+            {[
+              { id: "open", label: "Open" },
+              { id: "applied", label: "Applied" },
+              { id: "discarded", label: "Archived" }
+            ].map(cat => {
+              const count = jobs.filter(j => j.status === cat.id).length;
+              return (
+                <button 
+                  key={cat.id}
+                  onClick={() => setViewMode(cat.id as any)}
+                  style={{ background: viewMode === cat.id ? "var(--bg-hover)" : "transparent", border: `1px solid ${viewMode === cat.id ? "var(--border-strong)" : "transparent"}`, borderRadius: 8, color: viewMode === cat.id ? "var(--text-primary)" : "var(--text-tertiary)", fontWeight: 600, fontSize: 13, cursor: "pointer", padding: "6px 12px", fontFamily: "'Space Grotesk', sans-serif", transition: "all 0.2s" }}
+                >
+                  {cat.label} <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 6, opacity: 0.7 }}>{count}</span>
+                </button>
+              )
+            })}
           </div>
 
-          {/* Job cards */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {/* Cards */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {loading ? (
-              <div style={{ ...card, padding: 48, textAlign: "center", color: "var(--text-tertiary)" }}>
-                <div style={{ marginBottom: 12, fontSize: 13 }}>Loading opportunities...</div>
-                <div style={{ height: 2, background: "var(--border-subtle)", borderRadius: 1, overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: "60%", background: "var(--accent)", borderRadius: 1, animation: "pulse 1.5s ease-in-out infinite" }} />
-                </div>
+              <div style={{ ...glass, padding: 48, textAlign: "center" }}>
+                <div style={{ width: 32, height: 32, border: "2px solid var(--border-default)", borderTopColor: "var(--blue-core)", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 16px" }} />
+                <p style={{ margin: 0, fontSize: 13, color: "var(--text-tertiary)" }}>Loading opportunities…</p>
               </div>
-            ) : activeMissions.map((job) => (
+            ) : displayJobs.map(job => (
               <JobCard
                 key={job.id}
                 job={job}
@@ -269,21 +336,15 @@ export default function Home() {
                 onApplied={() => handleStatusUpdate(job.id, "applied")}
                 onDiscard={() => handleStatusUpdate(job.id, "discarded")}
                 onNotes={(n) => handleNotes(job.id, n)}
+                onStatusChange={(s) => handleStatusUpdate(job.id, s as any)}
               />
             ))}
           </div>
         </div>
 
         {/* ── RIGHT: SIDEBAR ── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16, maxHeight: "calc(100vh - 80px)", overflowY: "auto", position: "sticky", top: 80 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, position: "sticky", top: 78, maxHeight: "calc(100vh - 100px)", overflowY: "auto" }}>
 
-          {/* Stats card */}
-          <StatsCard status={status} />
-
-          {/* API Key */}
-          <ApiKeyPanel apiKey={apiKey} onSave={saveApiKey} />
-
-          {/* Application checklist or mission brief */}
           {tailored && selectedJob ? (
             <ApplicationChecklist
               job={selectedJob}
@@ -291,146 +352,195 @@ export default function Home() {
               outreach={outreach}
               outreachLoading={outreachLoading}
               checklist={checklist}
-              onCheckStep={(i) => setChecklist(c => ({ ...c, [i]: !c[i] }))}
+              onCheckStep={i => setChecklist(c => ({ ...c, [i]: !c[i] }))}
               onGenerateOutreach={() => handleOutreach(selectedJob.id)}
               onMarkApplied={() => { handleStatusUpdate(selectedJob.id, "applied"); setChecklist({ 0: true, 1: true, 2: true, 3: true, 4: true }); }}
             />
           ) : selectedJob ? (
-            <MissionBrief job={selectedJob} isTailoring={tailoring === selectedJob.id} onTailor={() => handleTailor(selectedJob.id)} />
+            <MissionBrief job={selectedJob} isTailoring={tailoring === selectedJob.id} onTailor={() => handleTailor(selectedJob.id)} onUpdate={(patch) => handleUpdateJob(selectedJob.id, patch)} />
           ) : (
-            <EmptyState />
+            <div style={{ ...glass, textAlign: "center", padding: 48, color: "var(--text-tertiary)" }}>
+              <p>Select a job to view mission details</p>
+            </div>
           )}
 
-          {/* Recent activity */}
-          <ActivityLog logs={logs} />
+          {missionLogs.length > 0 && <MissionLogPanel logs={missionLogs} />}
         </div>
       </div>
+      <SettingsModal show={showSettings} onClose={() => setShowSettings(false)} />
     </div>
   );
 }
 
 // ── JobCard ───────────────────────────────────────────────────────────────────
 
-function JobCard({ job, isSelected, isTailoring, onClick, onTailor, onOpen, onApplied, onDiscard, onNotes }: {
-  job: Job; isSelected: boolean; isTailoring: boolean;
-  onClick: () => void; onTailor: () => void; onOpen: () => void;
-  onApplied: () => void; onDiscard: () => void; onNotes: (n: string) => void;
-}) {
-  const badge = scoreBadge(job.matchScore);
-  const pc = priorityColor(job.priority);
+function JobCard({ job, isSelected, isTailoring, onClick, onTailor, onOpen, onApplied, onDiscard, onNotes, onStatusChange }: 
+  { job: Job, isSelected: boolean, isTailoring: boolean, onClick: () => void, onTailor: () => void, onOpen: () => void, onApplied: () => void, onDiscard: () => void, onNotes: (n: string) => void, onStatusChange?: (s: string) => void }) {
+  const grade = scoreGrade(job.matchScore);
   const [noteVal, setNoteVal] = useState(job.notes ?? "");
   const [noteSaved, setNoteSaved] = useState(false);
+  const isTracked = ['applied', 'interviewing', 'offer_received', 'accepted', 'rejected', 'no_answer'].includes(job.status);
+  
+  const statusColors: Record<string, string> = {
+    applied: "#c084fc",
+    interviewing: "#60a5fa",
+    offer_received: "#fbbf24",
+    accepted: "#4ade80",
+    rejected: "#f87171",
+    no_answer: "#9ca3af"
+  };
 
-  const saveNote = () => { onNotes(noteVal); setNoteSaved(true); setTimeout(() => setNoteSaved(false), 1500); };
-
-  const statusLabel: Record<string, { label: string; color: string; bg: string }> = {
-    tailored: { label: "Synthesized", color: "var(--color-success)", bg: "rgba(63,185,80,0.1)" },
-    applied: { label: "Applied", color: "var(--color-purple)", bg: "rgba(188,140,255,0.1)" },
-    suggested: { label: "", color: "", bg: "" },
-    queued: { label: "", color: "", bg: "" },
+  const statusChip: Record<string, { label: string; color: string; bg: string }> = {
+    synthesized: { label: "Synthesized", color: "#ffb347", bg: "rgba(255,179,71,0.1)" },
+    applied: { label: "Applied ✓", color: "#c084fc", bg: "rgba(192,132,252,0.1)" },
+    open: { label: "", color: "", bg: "" },
     discarded: { label: "", color: "", bg: "" },
   };
-  const st = statusLabel[job.status];
 
   return (
     <div
       onClick={onClick}
       style={{
+        position: "relative",
         background: isSelected ? "var(--bg-hover)" : "var(--bg-card)",
         border: `1px solid ${isSelected ? "var(--border-strong)" : "var(--border-subtle)"}`,
-        borderRadius: 10,
+        borderRadius: 12,
         cursor: "pointer",
-        transition: "all 0.15s",
+        transition: "all 0.18s ease",
+        boxShadow: isSelected ? "var(--glow-blue)" : "none",
         overflow: "hidden",
+        animation: "slide-in 0.2s ease",
       }}
     >
-      {/* Score stripe */}
-      <div style={{ height: 3, background: pc, opacity: isSelected ? 0.8 : 0.35 }} />
+      {/* Left accent bar */}
+      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: isTracked ? statusColors[job.status] : grade.color, opacity: isSelected ? 1 : 0.4, borderRadius: "12px 0 0 12px" }} />
 
-      <div style={{ padding: "14px 16px" }}>
-        {/* Top row */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            {/* Badges */}
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
-              <span style={{ background: badge.bg, color: badge.color, border: `1px solid ${badge.color}30`, borderRadius: 5, padding: "2px 8px", fontSize: 12, fontWeight: 600 }}>
-                {job.matchScore}
-              </span>
-              <span style={{ background: badge.bg, color: badge.color, borderRadius: 5, padding: "2px 8px", fontSize: 11, fontWeight: 500 }}>
-                {badge.label}
-              </span>
-              {st.label && (
-                <span style={{ background: st.bg, color: st.color, borderRadius: 5, padding: "2px 8px", fontSize: 11, fontWeight: 500 }}>
-                  {st.label}
+          <div style={{ padding: "16px 18px 16px 22px" }} onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+            if (job.status === "open" && !isTailoring) {
+              onTailor();
+            }
+          }}>
+        {/* Header row */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 10 }}>
+          {/* Score badge — game rank style */}
+          <div style={{
+            width: 48, height: 48, flexShrink: 0, borderRadius: 10,
+            background: grade.bg, border: `1px solid ${grade.color}30`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <span style={{ fontSize: 18, fontWeight: 800, color: grade.color, fontFamily: "'Space Grotesk', sans-serif" }}>{job.matchScore}</span>
+          </div>
+
+          {/* Title block */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
+              {isTracked ? (
+                <span style={{ fontSize: 11, fontWeight: 600, color: statusColors[job.status], background: `${statusColors[job.status]}15`, borderRadius: 5, padding: "2px 8px", textTransform: "uppercase" }}>
+                  {job.status}
+                </span>
+              ) : statusChip[job.status]?.label && (
+                <span style={{ fontSize: 11, fontWeight: 600, color: statusChip[job.status].color, background: statusChip[job.status].bg, borderRadius: 5, padding: "2px 8px" }}>
+                  {statusChip[job.status].label}
                 </span>
               )}
-              <span style={{ fontSize: 11, color: "var(--text-tertiary)", marginLeft: "auto" }}>{job.category}</span>
+              <span style={{ fontSize: 11, color: "var(--text-tertiary)", marginLeft: "auto" }}>Source: {job.source || "Direct"}</span>
             </div>
-            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {job.title}
-            </h3>
-            <p style={{ margin: "3px 0 0", fontSize: 12, color: "var(--text-secondary)" }}>
-              {job.company} · {job.location}
-            </p>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+               <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontFamily: "'Space Grotesk', sans-serif", letterSpacing: "-0.01em" }}>
+                 {job.title}
+               </h3>
+               {job.status === "open" && <span style={{ fontSize: 9, fontWeight: 800, color: "var(--blue-bright)", border: "1px solid var(--blue-border)", borderRadius: 4, padding: "1px 5px", textTransform: "uppercase" }}>Next: Synthesize</span>}
+               {job.status === "synthesized" && <span style={{ fontSize: 9, fontWeight: 800, color: "#ffb347", border: "1px solid rgba(255,179,71,0.4)", borderRadius: 4, padding: "1px 5px", textTransform: "uppercase" }}>Next: Review</span>}
+            </div>
+            <p style={{ margin: "3px 0 0", fontSize: 12, color: "var(--text-secondary)" }}>{job.company} · {job.location}</p>
+            {job.visaRequirements && <p style={{ margin: "4px 0 0", fontSize: 10, color: "rgba(255,179,71,0.9)", fontWeight: 600, textTransform: "uppercase" }}>✈️ {job.visaRequirements}</p>}
           </div>
         </div>
 
-        {/* Match signals */}
+        {/* Match score bar */}
+        <div style={{ height: 3, background: "var(--bg-surface)", borderRadius: 2, marginBottom: 10, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${job.matchScore}%`, background: `linear-gradient(90deg, ${grade.color}80, ${grade.color})`, borderRadius: 2, transition: "width 0.6s ease" }} />
+        </div>
+
+        {/* Signal chips */}
         {job.matchSignals && job.matchSignals.length > 0 && (
-          <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 5 }}>
-            {job.matchSignals.slice(0, 4).map(s => (
-              <span key={s} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 4 }}>
+            {job.matchSignals.slice(0, 5).map(s => (
+              <span key={s} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 5, background: "var(--blue-subtle)", border: "1px solid var(--blue-border)", color: "var(--blue-bright)", fontWeight: 500 }}>
                 {s}
               </span>
             ))}
           </div>
         )}
 
-        {/* Match reason */}
+        {/* Match reason — only when selected */}
         {isSelected && job.matchReason && (
-          <p style={{ margin: "10px 0 0", fontSize: 12, color: "var(--accent)", borderLeft: "2px solid var(--accent-border)", paddingLeft: 10, lineHeight: 1.5 }}>
+          <p style={{ margin: "10px 0 0", fontSize: 12, color: "var(--blue-bright)", borderLeft: "2px solid var(--blue-border)", paddingLeft: 10, lineHeight: 1.5, opacity: 0.9 }}>
             {job.matchReason}
           </p>
         )}
 
-        {/* Expanded actions */}
+        {/* Action row — expanded */}
         {isSelected && (
-          <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }} onClick={e => e.stopPropagation()}>
+          <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={onTailor} disabled={isTailoring} style={{ ...btnPrimary, opacity: isTailoring ? 0.7 : 1, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                {isTailoring ? (
-                  <><span style={{ width: 12, height: 12, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />Synthesizing…</>
-                ) : "✦ Synthesize with AI  ·  T"}
-              </button>
-              <button onClick={onOpen} title="Open posting · O" style={{ ...btnGhost, display: "flex", alignItems: "center", gap: 4 }}>↗</button>
-              <button onClick={onApplied} title="Mark applied · A" style={{ ...btnGhost, color: "var(--color-success)", borderColor: "rgba(63,185,80,0.3)" }}>✓</button>
-              <button onClick={onDiscard} title="Discard · D" style={{ ...btnGhost }}>✕</button>
+              {!isTracked ? (
+                <button
+                  onClick={onTailor}
+                  disabled={isTailoring}
+                  style={{
+                    flex: 1, padding: "11px 16px", borderRadius: 9, border: "none", cursor: "pointer",
+                    background: isTailoring ? "var(--blue-subtle)" : "linear-gradient(135deg, var(--blue-core), #6ba3ff)",
+                    color: isTailoring ? "var(--blue-bright)" : "#fff",
+                    fontSize: 13, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                    boxShadow: isTailoring ? "none" : "var(--glow-blue)",
+                    transition: "all 0.2s"
+                  }}
+                >
+                  {isTailoring ? (
+                    <><span style={{ width: 14, height: 14, border: "2px solid rgba(79,143,255,0.3)", borderTopColor: "var(--blue-bright)", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />Synthesizing…</>
+                  ) : "✦ Synthesize  ·  T"}
+                </button>
+              ) : (
+                <div style={{ flex: 1 }} />
+              )}
+              
+              <ActionBtn onClick={onOpen} title="Open · O" label="↗" />
+              {!isTracked && <ActionBtn onClick={onApplied} title="Applied · A" label="✓" color="#4ade80" borderColor="rgba(74,222,128,0.3)" />}
+              <ActionBtn onClick={onDiscard} title="Discard · D" label="✕" />
             </div>
+
+            {/* Inline Status Dropdown */}
+            {onStatusChange && (
+               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                 <span style={{ fontSize: 11, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>Status</span>
+                 <select 
+                   value={job.status} 
+                   onChange={e => { e.stopPropagation(); onStatusChange(e.target.value); }} 
+                   style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", borderRadius: 6, padding: "4px 8px", fontSize: 12, outline: "none", cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
+                   {["open", "synthesized", "applied", "interviewing", "offer_received", "accepted", "rejected", "no_answer", "discarded"].map(s => <option key={s} value={s} style={{ textTransform: "capitalize" }}>{s.replace("_", " ")}</option>)}
+                 </select>
+               </div>
+            )}
+
             {/* Notes */}
             <div style={{ position: "relative" }}>
               <textarea
                 value={noteVal}
                 onChange={e => setNoteVal(e.target.value)}
-                onBlur={saveNote}
-                placeholder="Add notes… e.g. 'Spoke to recruiter · Salary unclear'"
-                rows={2}
-                maxLength={280}
+                onBlur={() => { onNotes(noteVal); setNoteSaved(true); setTimeout(() => setNoteSaved(false), 1500); }}
+                placeholder="Notes… e.g. 'Spoke to recruiter' · 'Salary unclear'"
+                rows={2} maxLength={280}
                 style={{
-                  width: "100%",
-                  background: "var(--bg-surface)",
-                  border: "1px solid var(--border-subtle)",
-                  borderRadius: 8,
-                  padding: "10px 12px",
-                  fontSize: 12,
-                  color: "var(--text-secondary)",
-                  resize: "none",
-                  outline: "none",
-                  fontFamily: "inherit",
-                  lineHeight: 1.5,
-                  boxSizing: "border-box",
+                  width: "100%", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 8,
+                  padding: "10px 12px", fontSize: 12, color: "var(--text-secondary)", resize: "none",
+                  outline: "none", fontFamily: "inherit", lineHeight: 1.5, boxSizing: "border-box",
                 }}
               />
-              {noteSaved && <span style={{ position: "absolute", right: 10, top: 10, fontSize: 11, color: "var(--color-success)" }}>Saved ✓</span>}
+              {noteSaved && <span style={{ position: "absolute", right: 10, top: 10, fontSize: 11, color: "#4ade80" }}>Saved ✓</span>}
             </div>
           </div>
         )}
@@ -439,28 +549,48 @@ function JobCard({ job, isSelected, isTailoring, onClick, onTailor, onOpen, onAp
   );
 }
 
+function ActionBtn({ onClick, title, label, color = "var(--text-secondary)", borderColor = "var(--border-default)" }: { onClick: () => void; title: string; label: string; color?: string; borderColor?: string }) {
+  return (
+    <button onClick={onClick} title={title} style={{ width: 42, height: 42, borderRadius: 9, border: `1px solid ${borderColor}`, background: "transparent", color, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s", flexShrink: 0 }}>
+      {label}
+    </button>
+  );
+}
+
+
+
+
 // ── MissionBrief ──────────────────────────────────────────────────────────────
 
-function MissionBrief({ job, isTailoring, onTailor }: { job: Job; isTailoring: boolean; onTailor: () => void }) {
+function MissionBrief({ job, isTailoring, onTailor, onUpdate }: { job: Job; isTailoring: boolean; onTailor: () => void; onUpdate: (patch: Partial<Job>) => void }) {
+  const grade = scoreGrade(job.matchScore);
+
   return (
-    <div style={card}>
-      <p style={{ margin: "0 0 12px", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-tertiary)" }}>Job Brief</p>
-      <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 600 }}>{job.title}</h3>
-      <p style={{ margin: "0 0 14px", fontSize: 12, color: "var(--accent)" }}>{job.company} · {job.location}</p>
-      <p style={{ margin: "0 0 14px", fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 5, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-        {job.description}
-      </p>
-      {job.matchReason && (
-        <p style={{ margin: "0 0 16px", fontSize: 12, color: "var(--accent)", borderLeft: "2px solid var(--accent-border)", paddingLeft: 10, lineHeight: 1.5 }}>
-          {job.matchReason}
-        </p>
+    <div style={glass}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <p style={{ margin: 0, fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-tertiary)" }}>Job Brief</p>
+      </div>
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 14 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 9, background: grade.bg, border: `1.5px solid ${grade.color}40`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <span style={{ fontSize: 16, fontWeight: 800, color: grade.color, fontFamily: "'Space Grotesk', sans-serif" }}>{job.matchScore}</span>
+        </div>
+        <div style={{ flex: 1 }}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "var(--text-primary)", fontFamily: "'Space Grotesk', sans-serif", letterSpacing: "-0.01em" }}>{job.title}</h3>
+          <p style={{ margin: "3px 0 0", fontSize: 12, color: "var(--blue-bright)" }}>{job.company} · {job.location}</p>
+          {job.visaRequirements && <p style={{ margin: "3px 0 0", fontSize: 11, color: "#ffb347", display: "flex", alignItems: "center", gap: 4 }}>✈️ {job.visaRequirements}</p>}
+        </div>
+      </div>
+      <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.65, display: "-webkit-box", WebkitLineClamp: 5, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{job.description}</p>
+      {job.matchReason && <p style={{ margin: "0 0 16px", fontSize: 12, color: "var(--blue-bright)", borderLeft: "2px solid var(--blue-border)", paddingLeft: 10, lineHeight: 1.5 }}>{job.matchReason}</p>}
+      {isTailoring && (
+        <div style={{ width: "100%", padding: "12px", borderRadius: 9, background: "var(--blue-subtle)", color: "var(--blue-bright)", fontSize: 14, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 10 }}>
+          <span style={{ width: 14, height: 14, border: "2px solid rgba(79,143,255,0.3)", borderTopColor: "var(--blue-bright)", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />
+          Synthesizing Profile...
+        </div>
       )}
-      <button onClick={onTailor} disabled={isTailoring} style={{ ...btnPrimary, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, opacity: isTailoring ? 0.7 : 1, marginBottom: 10 }}>
-        {isTailoring ? <><span style={{ width: 12, height: 12, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />Synthesizing…</> : "✦ Synthesize CV + Cover Letter"}
-      </button>
       <div style={{ display: "flex", gap: 8 }}>
-        {job.url && <a href={job.url} target="_blank" rel="noopener noreferrer" style={{ ...btnGhost, textDecoration: "none", textAlign: "center", flex: 1, display: "block" }}>View posting ↗</a>}
-        <a href={`/api/agent/export/${job.id}?format=markdown`} download style={{ ...btnGhost, textDecoration: "none", textAlign: "center", flex: 1, display: "block" }}>Export ↓</a>
+        {job.url && <a href={job.url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, padding: "9px", borderRadius: 8, border: "1px solid var(--border-subtle)", color: "var(--text-secondary)", fontSize: 12, fontWeight: 600, textDecoration: "none", textAlign: "center" }}>View posting ↗</a>}
+        <a href={`/api/agent/export/${job.id}?format=markdown`} download style={{ flex: 1, padding: "9px", borderRadius: 8, border: "1px solid var(--border-subtle)", color: "var(--text-secondary)", fontSize: 12, fontWeight: 600, textDecoration: "none", textAlign: "center" }}>Export ↓</a>
       </div>
     </div>
   );
@@ -474,197 +604,116 @@ function ApplicationChecklist({ job, tailored, outreach, outreachLoading, checkl
   onCheckStep: (i: number) => void; onGenerateOutreach: () => void; onMarkApplied: () => void;
 }) {
   const { copied, copy } = useCopy();
-  const completedCount = Object.values(checklist).filter(Boolean).length;
-  const steps = ["Review tailored CV", "Copy cover letter", "Draft cold outreach", "Open job posting", "Mark as applied"];
-  const pct = (completedCount / steps.length) * 100;
+  const done = Object.values(checklist).filter(Boolean).length;
+  const total = 5;
+  const pct = (done / total) * 100;
 
   return (
-    <div style={{ ...card, display: "flex", flexDirection: "column", gap: 14 }}>
-      {/* Header */}
+    <div style={{ ...glass, display: "flex", flexDirection: "column", gap: 14 }}>
       <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <p style={{ margin: 0, fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-tertiary)" }}>Application Checklist</p>
-          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{completedCount}/{steps.length}</span>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <p style={{ margin: 0, fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-tertiary)" }}>Application Checklist</p>
+          <span style={{ fontSize: 12, color: pct === 100 ? "#4ade80" : "var(--blue-bright)", fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif" }}>{done}/{total}</span>
         </div>
-        <p style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>{job.title} · {job.company}</p>
-        {/* Progress */}
+        <p style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 600, color: "var(--text-primary)", fontFamily: "'Space Grotesk', sans-serif" }}>{job.company} · {job.title}</p>
         <div style={{ height: 4, background: "var(--bg-surface)", borderRadius: 2, overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${pct}%`, background: pct === 100 ? "var(--color-success)" : "var(--accent)", borderRadius: 2, transition: "width 0.4s ease" }} />
+          <div style={{ height: "100%", width: `${pct}%`, background: pct === 100 ? "#4ade80" : "linear-gradient(90deg, var(--blue-core), var(--blue-bright))", borderRadius: 2, transition: "width 0.5s ease", boxShadow: pct > 0 ? "0 0 8px rgba(79,143,255,0.5)" : "none" }} />
         </div>
       </div>
 
-      {/* Step 1: CV */}
-      <Step index={0} label="Review tailored CV" checked={!!checklist[0]} onToggle={() => onCheckStep(0)}>
-        <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 7, padding: 12, maxHeight: 120, overflowY: "auto", marginBottom: 8 }}>
-          <pre style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)", whiteSpace: "pre-wrap", lineHeight: 1.5, fontFamily: "'JetBrains Mono', monospace" }}>
-            {tailored.cvMarkdown.slice(0, 600)}{tailored.cvMarkdown.length > 600 ? "\n…" : ""}
-          </pre>
+      <CheckStep index={0} label="Review tailored CV" checked={!!checklist[0]} onToggle={() => onCheckStep(0)}>
+        <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 8, padding: 12, maxHeight: 120, overflowY: "auto", marginBottom: 8 }}>
+          <pre style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)", whiteSpace: "pre-wrap", lineHeight: 1.5, fontFamily: "'JetBrains Mono', monospace" }}>{tailored.cvMarkdown.slice(0, 600)}{tailored.cvMarkdown.length > 600 ? "\n…" : ""}</pre>
         </div>
         <CopyBtn text={tailored.cvMarkdown} label="Copy full CV" k="cv" copied={copied} onCopy={(t, k) => { copy(t, k); onCheckStep(0); }} />
-      </Step>
+      </CheckStep>
 
-      {/* Step 2: Cover letter */}
-      <Step index={1} label="Copy cover letter" checked={!!checklist[1]} onToggle={() => onCheckStep(1)}>
-        <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 7, padding: 12, maxHeight: 120, overflowY: "auto", marginBottom: 8 }}>
+      <CheckStep index={1} label="Copy cover letter" checked={!!checklist[1]} onToggle={() => onCheckStep(1)}>
+        <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 8, padding: 12, maxHeight: 120, overflowY: "auto", marginBottom: 8 }}>
           <p style={{ margin: 0, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{tailored.coverLetter}</p>
         </div>
         <CopyBtn text={tailored.coverLetter} label="Copy cover letter" k="cl" copied={copied} onCopy={(t, k) => { copy(t, k); onCheckStep(1); }} />
-      </Step>
+      </CheckStep>
 
-      {/* Step 3: Outreach */}
-      <Step index={2} label="Draft cold outreach" checked={!!checklist[2]} onToggle={() => onCheckStep(2)}>
+      <CheckStep index={2} label="Draft cold outreach" checked={!!checklist[2]} onToggle={() => onCheckStep(2)}>
         {!outreach ? (
-          <button onClick={onGenerateOutreach} disabled={outreachLoading} style={{ ...btnGhost, width: "100%", marginTop: 8 }}>
+          <button onClick={onGenerateOutreach} disabled={outreachLoading} style={{ width: "100%", marginTop: 8, padding: "10px", borderRadius: 8, border: "1px solid var(--border-default)", background: "transparent", color: "var(--text-secondary)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
             {outreachLoading ? "Generating…" : "Generate LinkedIn + Email outreach"}
           </button>
         ) : (
           <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 10 }}>
-            {outreach.mock && (
-              <div style={{ fontSize: 11, color: "var(--color-high)", background: "rgba(210,153,34,0.1)", border: "1px solid rgba(210,153,34,0.2)", borderRadius: 6, padding: "6px 10px" }}>
-                Preview mode · add API key for personalised outreach
+            {outreach.mock && <div style={{ fontSize: 11, color: "#ffb347", background: "rgba(255,179,71,0.08)", border: "1px solid rgba(255,179,71,0.2)", borderRadius: 7, padding: "7px 10px" }}>Preview — add API key for personalised outreach</div>}
+            {[
+              { title: `LinkedIn · ${outreach.suggestedContact}`, text: outreach.linkedinMessage, k: "li", full: outreach.linkedinMessage },
+              { title: `Email · ${outreach.emailSubject}`, text: outreach.emailBody, k: "em", full: `Subject: ${outreach.emailSubject}\n\n${outreach.emailBody}` },
+            ].map(({ title, text, k, full }) => (
+              <div key={k} style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 9, padding: 12 }}>
+                <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{title}</p>
+                <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{text}</p>
+                <CopyBtn text={full} label="Copy" k={k} copied={copied} onCopy={(t, kk) => { copy(t, kk); onCheckStep(2); }} />
               </div>
-            )}
-            <OutreachBlock title={`LinkedIn · ${outreach.suggestedContact}`} text={outreach.linkedinMessage} copyKey="li" copied={copied} onCopy={(t, k) => { copy(t, k); onCheckStep(2); }} />
-            <OutreachBlock title={`Email · ${outreach.emailSubject}`} text={outreach.emailBody} copyKey="em" copied={copied} onCopy={(t, k) => { copy(t, k); onCheckStep(2); }} fullText={`Subject: ${outreach.emailSubject}\n\n${outreach.emailBody}`} />
+            ))}
           </div>
         )}
-      </Step>
+      </CheckStep>
 
-      {/* Step 4: Open posting */}
-      <Step index={3} label="Open job posting" checked={!!checklist[3]} onToggle={() => onCheckStep(3)}>
-        <button onClick={() => { if (job.url) { window.open(job.url, "_blank"); onCheckStep(3); } }} style={{ ...btnGhost, width: "100%", marginTop: 8 }}>
+      <CheckStep index={3} label="Open job posting" checked={!!checklist[3]} onToggle={() => onCheckStep(3)}>
+        <button onClick={() => { if (job.url) { window.open(job.url, "_blank"); onCheckStep(3); } }} style={{ width: "100%", marginTop: 8, padding: "10px", borderRadius: 8, border: "1px solid var(--border-default)", background: "transparent", color: "var(--text-secondary)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
           Open {job.company} application ↗
         </button>
-      </Step>
+      </CheckStep>
 
-      {/* Step 5: Confirm */}
-      <Step index={4} label="Mark as applied" checked={!!checklist[4]} onToggle={() => onCheckStep(4)}>
-        <button onClick={onMarkApplied} style={{
-          ...btnPrimary, marginTop: 8,
-          background: checklist[4] ? "var(--color-success)" : "var(--accent)",
-          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-        }}>
+      <CheckStep index={4} label="Mark as applied" checked={!!checklist[4]} onToggle={() => onCheckStep(4)}>
+        <button onClick={onMarkApplied} style={{ width: "100%", marginTop: 8, padding: "12px", borderRadius: 9, border: "none", background: checklist[4] ? "#4ade80" : "linear-gradient(135deg, var(--blue-core), #6ba3ff)", color: checklist[4] ? "#000" : "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", boxShadow: checklist[4] ? "0 4px 16px rgba(74,222,128,0.3)" : "0 4px 16px rgba(79,143,255,0.3)", transition: "all 0.2s" }}>
           {checklist[4] ? "✓ Applied — well done!" : "Confirm application sent"}
         </button>
-      </Step>
+      </CheckStep>
 
-      <a href={`/api/agent/export/${job.id}?format=markdown`} download style={{ textAlign: "center", fontSize: 12, color: "var(--text-tertiary)", textDecoration: "none", paddingTop: 4 }}>
+      <a href={`/api/agent/export/${job.id}?format=markdown`} download style={{ textAlign: "center", fontSize: 12, color: "var(--text-tertiary)", textDecoration: "none" }}>
         Download full application package ↓
       </a>
     </div>
   );
 }
 
-// ── Step ──────────────────────────────────────────────────────────────────────
-
-function Step({ index, label, checked, onToggle, children }: {
-  index: number; label: string; checked: boolean; onToggle: () => void; children?: React.ReactNode;
-}) {
+function CheckStep({ index, label, checked, onToggle, children }: { index: number; label: string; checked: boolean; onToggle: () => void; children?: React.ReactNode }) {
   const [open, setOpen] = useState(index === 0);
   return (
-    <div style={{ border: `1px solid ${checked ? "rgba(63,185,80,0.25)" : "var(--border-subtle)"}`, borderRadius: 8, overflow: "hidden", background: checked ? "rgba(63,185,80,0.04)" : "transparent", transition: "all 0.2s" }}>
-      <button onClick={() => setOpen(!open)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}>
-        <button onClick={e => { e.stopPropagation(); onToggle(); }} style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${checked ? "var(--color-success)" : "var(--border-strong)"}`, background: checked ? "var(--color-success)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: "pointer", transition: "all 0.15s" }}>
-          {checked && <span style={{ fontSize: 10, color: "#000", fontWeight: 700 }}>✓</span>}
+    <div style={{ border: `1px solid ${checked ? "rgba(74,222,128,0.2)" : "var(--border-subtle)"}`, borderRadius: 9, background: checked ? "rgba(74,222,128,0.04)" : "transparent", transition: "all 0.2s", overflow: "hidden" }}>
+      <button onClick={() => setOpen(!open)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", background: "transparent", border: "none", cursor: "pointer" }}>
+        <button onClick={e => { e.stopPropagation(); onToggle(); }} style={{ width: 20, height: 20, borderRadius: 6, border: `1.5px solid ${checked ? "#4ade80" : "var(--border-strong)"}`, background: checked ? "#4ade80" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, transition: "all 0.15s" }}>
+          {checked && <span style={{ fontSize: 11, color: "#000", fontWeight: 800 }}>✓</span>}
         </button>
-        <span style={{ fontSize: 13, fontWeight: 500, color: checked ? "var(--text-secondary)" : "var(--text-primary)", flex: 1, textDecoration: checked ? "line-through" : "none" }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: checked ? "var(--text-tertiary)" : "var(--text-primary)", flex: 1, textAlign: "left", textDecoration: checked ? "line-through" : "none", fontFamily: "'Space Grotesk', sans-serif" }}>
           {String(index + 1).padStart(2, "0")}. {label}
         </span>
-        <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{open ? "▲" : "▼"}</span>
+        <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{open ? "▲" : "▼"}</span>
       </button>
-      {open && <div style={{ padding: "0 12px 12px" }}>{children}</div>}
+      {open && <div style={{ padding: "0 14px 14px" }}>{children}</div>}
     </div>
   );
 }
 
-// ── CopyBtn ───────────────────────────────────────────────────────────────────
-
 function CopyBtn({ text, label, k, copied, onCopy }: { text: string; label: string; k: string; copied: string | null; onCopy: (t: string, k: string) => void }) {
   const isCopied = copied === k;
   return (
-    <button onClick={() => onCopy(text, k)} style={{ ...btnGhost, fontSize: 12, color: isCopied ? "var(--color-success)" : "var(--text-secondary)", borderColor: isCopied ? "rgba(63,185,80,0.3)" : "var(--border-default)" }}>
+    <button onClick={() => onCopy(text, k)} style={{ padding: "7px 14px", borderRadius: 7, border: `1px solid ${isCopied ? "rgba(74,222,128,0.3)" : "var(--border-default)"}`, background: "transparent", color: isCopied ? "#4ade80" : "var(--text-secondary)", fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all 0.15s" }}>
       {isCopied ? "Copied ✓" : label}
     </button>
   );
 }
 
-// ── OutreachBlock ─────────────────────────────────────────────────────────────
-
-function OutreachBlock({ title, text, copyKey, copied, onCopy, fullText }: { title: string; text: string; copyKey: string; copied: string | null; onCopy: (t: string, k: string) => void; fullText?: string }) {
-  return (
-    <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 8, padding: 12 }}>
-      <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{title}</p>
-      <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{text}</p>
-      <CopyBtn text={fullText ?? text} label="Copy" k={copyKey} copied={copied} onCopy={onCopy} />
-    </div>
-  );
-}
-
-// ── StatsCard ─────────────────────────────────────────────────────────────────
-
-function StatsCard({ status }: { status: AgentStatus | null }) {
-  return (
-    <div style={card}>
-      <p style={{ margin: "0 0 12px", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-tertiary)" }}>Pipeline</p>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        {[
-          ["Total", status?.pipeline.total ?? 0, "var(--text-primary)"],
-          ["Active", status?.pipeline.suggested ?? 0, "var(--accent)"],
-          ["Synthesized", status?.pipeline.tailored ?? 0, "var(--color-high)"],
-          ["Applied", status?.pipeline.applied ?? 0, "var(--color-success)"],
-        ].map(([label, val, color]) => (
-          <div key={label as string} style={{ background: "var(--bg-surface)", borderRadius: 8, padding: "10px 12px", border: "1px solid var(--border-subtle)" }}>
-            <div style={{ fontSize: 20, fontWeight: 700, color: color as string, lineHeight: 1 }}>{val as number}</div>
-            <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 4 }}>{label as string}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── ApiKeyPanel ───────────────────────────────────────────────────────────────
-
-function ApiKeyPanel({ apiKey, onSave }: { apiKey: string; onSave: (k: string) => void }) {
-  const [input, setInput] = useState(apiKey);
-  const [saved, setSaved] = useState(false);
-  const save = () => { onSave(input.trim()); setSaved(true); setTimeout(() => setSaved(false), 2000); };
-  return (
-    <div style={card}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <p style={{ margin: 0, fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-tertiary)" }}>Gemini API Key</p>
-        <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>BYOK · your credits</span>
-      </div>
-      <div style={{ display: "flex", gap: 8 }}>
-        <input type="password" placeholder="AIzaSy…" value={input}
-          onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && save()}
-          style={{ flex: 1, background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "var(--text-primary)", outline: "none", fontFamily: "inherit" }} />
-        <button onClick={save} style={{ ...btnPrimary, width: "auto", padding: "8px 16px", background: saved ? "var(--color-success)" : "var(--accent)" }}>
-          {saved ? "Saved" : "Set"}
-        </button>
-      </div>
-      <p style={{ margin: "8px 0 0", fontSize: 11, color: "var(--text-tertiary)" }}>
-        Free key at <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" style={{ color: "var(--text-link)", textDecoration: "none" }}>aistudio.google.com</a>
-         · Stored locally only
-      </p>
-    </div>
-  );
-}
-
-// ── ActivityLog ───────────────────────────────────────────────────────────────
-
 function ActivityLog({ logs }: { logs: AgentLog[] }) {
   if (logs.length === 0) return null;
   return (
-    <div style={card}>
-      <p style={{ margin: "0 0 12px", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-tertiary)" }}>Recent Activity</p>
+    <div style={glass}>
+      <p style={{ margin: "0 0 12px", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-tertiary)" }}>Activity</p>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {logs.slice(0, 8).map((log, i) => (
-          <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-            <span style={{ fontSize: 11, color: "var(--text-tertiary)", whiteSpace: "nowrap", paddingTop: 1, fontFamily: "'JetBrains Mono', monospace" }}>{formatTime(log.timestamp)}</span>
+        {logs.slice(0, 6).map((log, i) => (
+          <div key={i} style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
+            <span suppressHydrationWarning style={{ fontSize: 10, color: "var(--text-tertiary)", whiteSpace: "nowrap", fontFamily: "'JetBrains Mono', monospace" }}>{formatTime(log.timestamp)}</span>
             <span style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.4 }}>
-              <span style={{ color: "var(--accent)", fontWeight: 500 }}>{log.action}  </span>
-              {log.detail}
+              <span style={{ color: "var(--blue-bright)", fontWeight: 600 }}>{log.action} </span>{log.detail}
             </span>
           </div>
         ))}
@@ -673,18 +722,151 @@ function ActivityLog({ logs }: { logs: AgentLog[] }) {
   );
 }
 
-// ── EmptyState ────────────────────────────────────────────────────────────────
+function MissionLogPanel({ logs }: { logs: any[] }) {
+  return (
+    <div style={glass}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ade80", boxShadow: "0 0 10px #4ade80" }} />
+        <p style={{ margin: 0, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-tertiary)" }}>Live Mission Feed</p>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {logs.slice(0, 5).map((log, i) => (
+          <div key={i} style={{ fontSize: 11, color: i === 0 ? "var(--text-primary)" : "var(--text-secondary)", display: "flex", gap: 8, borderLeft: i === 0 ? "2px solid var(--blue-core)" : "1px solid var(--border-subtle)", paddingLeft: 8, opacity: 1 - (i * 0.15) }}>
+            <span style={{ color: "var(--text-tertiary)", flexShrink: 0 }}>{new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+            <span style={{ fontWeight: log.action === "APPLIED" ? 700 : 400, color: log.action === "APPLIED" ? "#4ade80" : "inherit" }}>{log.message}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function EmptyState() {
   return (
-    <div style={{ ...card, textAlign: "center", padding: 32 }}>
-      <div style={{ width: 40, height: 40, borderRadius: 10, background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", margin: "0 auto 12px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
-        ✦
-      </div>
-      <p style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Select an opportunity</p>
+    <div style={{ ...glass, textAlign: "center", padding: 36 }}>
+      <div style={{ width: 48, height: 48, borderRadius: 12, background: "var(--blue-subtle)", border: "1px solid var(--blue-border)", margin: "0 auto 14px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, boxShadow: "0 0 20px rgba(79,143,255,0.15)" }}>✦</div>
+      <p style={{ margin: "0 0 6px", fontSize: 15, fontWeight: 700, color: "var(--text-primary)", fontFamily: "'Space Grotesk', sans-serif" }}>Select an opportunity</p>
       <p style={{ margin: 0, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>
-        Click any job to view details and<br />synthesize a tailored application
+        Click any role to view the brief<br />and synthesize a tailored application
       </p>
+    </div>
+  );
+}
+
+// ── SettingsModal ─────────────────────────────────────────────────────────────
+
+function SettingsModal({ show, onClose }: { show: boolean; onClose: () => void }) {
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setApiKey(localStorage.getItem('runek_api_key') || "");
+    }
+  }, [show]);
+
+  useEffect(() => {
+    if (show && !profile) {
+      setLoading(true);
+      fetch('/api/agent/profile').then(r => r.json()).then(d => {
+        setProfile(d.data);
+        setLoading(false);
+      });
+    }
+  }, [show, profile]);
+
+  if (!show) return null;
+
+  const handleSave = async () => {
+    setSaving(true);
+    localStorage.setItem('runek_api_key', apiKey);
+    localStorage.setItem('runek_profile_set', 'true');
+    await fetch('/api/agent/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profile)
+    });
+    setSaving(false);
+    onClose();
+    window.location.reload(); // Reload to refresh everything with new profile
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(4px)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "var(--bg-base)", border: "1px solid var(--border-strong)", borderRadius: 12, padding: 32, width: 800, maxWidth: "90vw", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 40px rgba(0,0,0,0.4)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+          <h2 style={{ margin: 0, fontFamily: "'Space Grotesk', sans-serif", fontSize: 24 }}>Global Profile Settings</h2>
+          <button onClick={onClose} style={{ background: "transparent", color: "var(--text-tertiary)", border: "none", fontSize: 24, cursor: "pointer" }}>×</button>
+        </div>
+        
+        {loading || !profile ? (
+          <div style={{ padding: 40, textAlign: "center", color: "var(--text-tertiary)" }}>Loading profile...</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <div style={{ display: "flex", gap: 16 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 6, textTransform: "uppercase" }}>Full Name</label>
+                <input value={profile.name} onChange={e => setProfile({...profile, name: e.target.value})} style={{ width: "100%", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", color: "#fff", padding: "10px", borderRadius: 8, fontSize: 14 }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 6, textTransform: "uppercase" }}>Current Title</label>
+                <input value={profile.title} onChange={e => setProfile({...profile, title: e.target.value})} style={{ width: "100%", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", color: "#fff", padding: "10px", borderRadius: 8, fontSize: 14 }} />
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 6, textTransform: "uppercase" }}>Home Base / Region</label>
+              <input value={profile.location} onChange={e => setProfile({...profile, location: e.target.value})} style={{ width: "100%", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", color: "#fff", padding: "10px", borderRadius: 8, fontSize: 14 }} />
+            </div>
+
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 6, textTransform: "uppercase" }}>Qwen / OpenAI API Key (Optional)</label>
+              <input 
+                type="password"
+                value={apiKey} 
+                onChange={e => setApiKey(e.target.value)} 
+                placeholder="sk-..."
+                style={{ width: "100%", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", color: "#fff", padding: "10px", borderRadius: 8, fontSize: 14 }} 
+              />
+              <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--text-tertiary)" }}>Stored locally in your browser. Used for AI synthesis.</p>
+            </div>
+
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 6, textTransform: "uppercase" }}>Autopilot Resume (PDF)</label>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <input 
+                  type="file" 
+                  accept=".pdf" 
+                  onChange={handleCvUpload} 
+                  disabled={uploading}
+                  style={{ flex: 1, fontSize: 13, color: "var(--text-secondary)" }} 
+                />
+                {uploading && <span style={{ fontSize: 11, color: "var(--blue-bright)" }}>Uploading...</span>}
+              </div>
+              <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--text-tertiary)" }}>This PDF will be used by the Autopilot for all applications.</p>
+            </div>
+
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 6 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase" }}>Base CV / Resume Data (Markdown)</label>
+                <span style={{ fontSize: 11, color: "var(--blue-bright)" }}>Engine's ground truth for synthesis</span>
+              </div>
+              <textarea 
+                value={profile.baseCV} 
+                onChange={e => setProfile({...profile, baseCV: e.target.value})} 
+                style={{ width: "100%", height: 250, background: "var(--bg-surface)", border: "1px solid var(--border-strong)", color: "var(--text-secondary)", padding: "14px", borderRadius: 8, fontSize: 13, fontFamily: "'JetBrains Mono', monospace", resize: "vertical" }} 
+              />
+            </div>
+            
+            <button onClick={handleSave} disabled={saving} style={{ alignSelf: "flex-end", background: "var(--blue-core)", color: "#fff", border: "none", borderRadius: 8, padding: "12px 32px", fontSize: 14, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
+              {saving ? "Saving..." : "Save Profile"}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

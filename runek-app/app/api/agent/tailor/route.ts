@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { pipelineStore } from '../../../../lib/services/pipeline-store';
 import { RunekAgent } from '../../../../lib/services/ai-service';
-import { IGNACY_PROFILE } from '../../../../lib/data/profile';
+import { ProfileStore } from '../../../../lib/services/profile-store';
+
+import { getApiKey } from '../../../../lib/services/ai-utils';
 
 // Helper: extract user-supplied API key from headers
 function getUserApiKey(request: Request): string | undefined {
-  return request.headers.get('x-api-key') ?? request.headers.get('x-google-api-key') ?? undefined;
+  return getApiKey(request.headers.get('x-api-key') || request.headers.get('x-google-api-key'));
 }
 
 /**
@@ -24,18 +26,19 @@ export async function POST(request: Request) {
     const userApiKey = getUserApiKey(request);
     pipelineStore.log('TAILOR', `Initiating synthesis for ${job.title} @ ${job.company}`, jobId, userApiKey ? 'user-key' : 'env-key');
 
-    const agent = new RunekAgent(IGNACY_PROFILE.baseCV, userApiKey);
+    const profile = ProfileStore.getInstance().get();
+    const agent = new RunekAgent(profile.baseCV, userApiKey);
     let result;
     try {
       result = await agent.tailorForJob(job);
     } catch (apiErr) {
       const msg = apiErr instanceof Error ? apiErr.message : 'API key error';
-      return NextResponse.json({ ok: false, error: msg, hint: 'Pass your Gemini API key via X-Api-Key header' }, { status: 402 });
+      return NextResponse.json({ ok: false, error: msg, hint: 'Pass your Qwen API key via X-Api-Key header' }, { status: 402 });
     }
 
-    // Mark as tailored
+    // Mark as synthesized
     pipelineStore.update(jobId, {
-      status: 'tailored',
+      status: 'synthesized',
       tailoredAt: new Date().toISOString(),
     });
 

@@ -1,29 +1,39 @@
 import { NextResponse } from 'next/server';
 import { pipelineStore } from '../../../../lib/services/pipeline-store';
-import { IGNACY_PROFILE } from '../../../../lib/data/profile';
+import { ProfileStore } from '../../../../lib/services/profile-store';
+
+import { resolveBaseUrl, resolveModel, getApiKey, DEFAULT_OLLAMA_URL } from '../../../../lib/services/ai-utils';
+
+const QWEN_BASE_URL = resolveBaseUrl();
+const QWEN_MODEL = resolveModel();
 
 function getUserApiKey(request: Request): string | undefined {
-  return request.headers.get('x-api-key') ?? request.headers.get('x-google-api-key') ?? undefined;
+  return getApiKey(request.headers.get('x-api-key'));
 }
 
-const OUTREACH_PROMPT = (job: { title: string; company: string; category: string; description: string }) => `
-You are Runek, writing on behalf of Ignacy Januszek — a Systems PM with AUV robotics, AI automation, and B2B product experience.
+const OUTREACH_PROMPT = (job: { title: string; company: string; category: string; description: string }, profile: any) => `
+You are Runek, a Christian career agent writing on behalf of ${profile.name} — ${profile.title}.
 
-Write outreach materials for this role. Return valid JSON only.
+Write compassionate outreach materials for this role. Return valid JSON only.
 
 ROLE: ${job.title} at ${job.company} (${job.category})
 DESCRIPTION: ${job.description}
 
-IGNACY'S PROFILE:
-- Systems Product Manager, Warsaw, open to relocation
-- Founded ProcessMate AI (B2B automation), led AUV product at AGH Marines
-- Translates complex technical domains (robotics, AI, energy) into product direction
+YOUR PROFILE (The Candidate):
+- ${profile.title}, ${profile.location}, open to relocation: ${profile.openToRelocation}
+- Top technical and service highlights: ${profile.signals.slice(0, 3).map((s: any) => s.skill).join(', ')}
+- You translate complex technical domains into ways to help people and relieve pain through faith-guided products.
+
+CRITICAL CONSTRAINTS:
+1. Only reference technologies or experiences actually listed in the profile. We walk in truth.
+2. Reframe adjacent experience to look attractive and service-oriented. Emphasize ethical work and NO ungodly practices.
+3. Your tone should be polite, humble, and compassionate.
 
 Return:
 {
-  "linkedinMessage": "<3 sentences max. Open with a specific observation about their tech/mission, then connect to Ignacy's experience. No 'I am reaching out.' Max 300 chars.>",
-  "emailSubject": "<compelling subject line, not 'Application for...' — something they'd open>",
-  "emailBody": "<5–6 sentences. Opening: a sharp systems-level insight about their domain. Middle: 2 specific proof points from Ignacy's background. Close: clear ask (30-min call). No fluff.>",
+  "linkedinMessage": "<3 sentences max. Open with an observation about how their company can help people or spread good, then connect to the candidate's background of service. Max 300 chars.>",
+  "emailSubject": "<polite, compassionate subject line — something that invites connection>",
+  "emailBody": "<5–6 sentences. Opening: sharing a sense of mission to help people in their domain. Middle: 2 specific proof points of honest, faith-aligned work from the candidate's background. Close: a polite request for a 30-min call.>",
   "suggestedContact": "<who to target: 'Hiring Manager', 'CPO', 'CTO', 'Founder' — based on company stage/role>"
 }
 `.trim();
@@ -36,18 +46,20 @@ export async function POST(request: Request) {
     const job = pipelineStore.getById(jobId);
     if (!job) return NextResponse.json({ ok: false, error: 'Job not found' }, { status: 404 });
 
-    const apiKey = getUserApiKey(request) || process.env.GOOGLE_API_KEY;
+    const apiKey = getUserApiKey(request) || process.env.QWEN_API_KEY || process.env.OPENAI_API_KEY;
+    const isUsingOllama = !apiKey && QWEN_BASE_URL === DEFAULT_OLLAMA_URL;
 
-    pipelineStore.log('OUTREACH', `Drafting outreach for ${job.company}`, jobId);
+    pipelineStore.log('OUTREACH', `Drafting outreach for ${job.company}${isUsingOllama ? ' (Ollama local)' : ''}`, jobId);
 
-    if (!apiKey) {
+    if (!apiKey && !isUsingOllama) {
+      const profile = ProfileStore.getInstance().get();
       // Return a mock outreach if no key available
       return NextResponse.json({
         ok: true,
         data: {
-          linkedinMessage: `The intersection of ${job.category.toLowerCase()} systems and product is where I live — your work at ${job.company} on ${job.description.split('.')[0].toLowerCase()} is exactly the kind of challenge I want to be solving. Would love 20 mins to compare notes.`,
-          emailSubject: `${job.category} Systems PM → ${job.company} — worth a conversation?`,
-          emailBody: `${job.company}'s approach to ${job.description.split('.')[0].toLowerCase()} caught my attention — it's a genuinely hard systems problem.\n\nI've spent the last two years at the intersection of complex technical domains and product direction: leading underwater AUV product at AGH Marines and founding ProcessMate AI, where I ran B2B automation discovery from scratch.\n\nI translate between engineering realities and commercial goals — which is what a PM in your space needs to do every day.\n\nWould a 30-minute call this week make sense?\n\nIgnacy Januszek | ignacyjanuszek@gmail.com`,
+          linkedinMessage: `Your work at ${job.company} caught my eye because of its potential to truly help people in need. I'm a PM passionate about serving communities through ${job.category.toLowerCase()} systems. Would love to share a brief, faithful conversation.`,
+          emailSubject: `Driven by faith and compassion: serving alongside ${job.company}`,
+          emailBody: `${job.company}'s potential to uplift others and alleviate pain through ${job.description.split('.')[0].toLowerCase()} is truly inspiring.\n\nI've spent the last two years focusing on service-oriented technical leadership: leading underwater AUV product intuitively at AGH Marines and founding ProcessMate AI to honestly help teams remove burdens.\n\nI believe in walking in truth and bringing technical realities into harmony with ethical, compassionate goals.\n\nWould a 30-minute call this week make sense to explore how I could serve your team?\n\nBlessings,\n${profile.name}`,
           suggestedContact: job.category === 'Robotics' || job.category === 'Space' ? 'CTO / Head of Engineering' : 'CPO / Founder',
           mock: true,
         },
@@ -55,23 +67,37 @@ export async function POST(request: Request) {
       });
     }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: OUTREACH_PROMPT(job) }] }],
-          generationConfig: { responseMimeType: 'application/json' },
-        }),
-      }
-    );
+    const profile = ProfileStore.getInstance().get();
+    const fetchHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey) fetchHeaders.Authorization = `Bearer ${apiKey}`;
+
+    const response = await fetch(`${QWEN_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: fetchHeaders,
+      body: JSON.stringify({
+        model: QWEN_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are Runek, a faithful career agent. You MUST return ONLY valid JSON. No markdown, no explanation, no code fences.',
+          },
+          {
+            role: 'user',
+            content: OUTREACH_PROMPT(job, profile),
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.7,
+      }),
+    });
 
     const data = await response.json();
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!raw) throw new Error('Empty response from Gemini');
+    const raw = data.choices?.[0]?.message?.content;
+    if (!raw) throw new Error('Empty response from Qwen');
 
-    const parsed = JSON.parse(raw);
+    // Strip markdown code fences if present
+    const cleaned = raw.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '').trim();
+    const parsed = JSON.parse(cleaned);
     pipelineStore.log('OUTREACH_DONE', `Outreach drafted for ${job.company}`, jobId);
 
     return NextResponse.json({

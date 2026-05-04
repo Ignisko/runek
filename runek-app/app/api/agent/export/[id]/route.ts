@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { pipelineStore } from '../../../../../lib/services/pipeline-store';
 import { RunekAgent } from '../../../../../lib/services/ai-service';
-import { IGNACY_PROFILE } from '../../../../../lib/data/profile';
+import { ProfileStore } from '../../../../../lib/services/profile-store';
 
 function getUserApiKey(request: Request): string | undefined {
   return request.headers.get('x-api-key') ?? request.headers.get('x-google-api-key') ?? undefined;
@@ -24,7 +24,8 @@ export async function GET(
   if (!job) return NextResponse.json({ ok: false, error: 'Job not found' }, { status: 404 });
 
   // Always re-generate on export (fresh synthesis)
-  const agent = new RunekAgent(IGNACY_PROFILE.baseCV, getUserApiKey(request));
+  const profile = ProfileStore.getInstance().get();
+  const agent = new RunekAgent(profile.baseCV, getUserApiKey(request));
   const tailored = await agent.tailorForJob(job);
 
   if (format === 'markdown') {

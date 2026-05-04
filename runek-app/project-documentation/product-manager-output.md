@@ -1,136 +1,98 @@
-# Runek v0.3 — Product Specification
-## "From Display to Action Engine"
+
+1/1
+
+Next.js 16.2.1 (stale)
+Turbopack
+Build Error
+
+Expected '</', got 'jsx text'
+./app/page.tsx (171:15)
+
+Expected '</', got 'jsx text'
+  169 |
+  170 |           </div>
+> 171 |         </div>
+      |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 172 |       </header>
+      | ^^^^^^
+  173 |
+  174 |       {/*── BODY ──*/}
+  175 |       <div style={{ maxWidth: 1440, margin: "0 auto", padding: "28px 28px", display: "gri...
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./app/page.tsx [Client Component Browser]
+    ./app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./app/page.tsx [Client Component SSR]
+    ./app/page.tsx [Server Component]
+1
+2
+
+# Product Requirements Document: Configurable Candidate Profile & Employment Eligibility
+
+## Executive Summary
+
+- **Elevator Pitch**: Transform the Runek Job Application Engine from a single-user personalized agent into a multi-tenant or distributable SaaS tool by introducing a dynamic, configurable Candidate Profile system that powers intelligent job scoring.
+- **Problem Statement**: The current LLM-driven job matching engine uses a hardcoded configuration profile (`profile.ts`) tailored specifically to the original creator (including implicit European Union work eligibility based on Polish citizenship). If shared with other job-seekers, the engine would hallucinate job fits or draft cover letters with incorrect constraints and backgrounds.
+- **Target Audience**: Future users of the Runek Engine—technical professionals, PMs, and engineers who wish to automate their own job hunts without needing to edit raw TypeScript source files.
+- **Unique Selling Proposition**: Instead of manually cross-referencing visa requirements and relocation constraints per job, the engine autonomously cross-references the user's explicit work eligibilities (Citizenships / Visas) against a job's requirements to penalize or boost match scores.
+- **Success Metrics**:
+  1. 100% of the matching engine's context is decoupled from hardcoded source code.
+  2. Users can seamlessly onboard and dictate their visa/citizenship restrictions via a frontend GUI.
 
 ---
 
-## Problem Statement
+## Feature Specifications
 
-Runek v0.2 looks like a war room but **acts like a screensaver**. After AI synthesis completes, the user has a CV and cover letter on screen but no clear path to actually applying. There's no copy button, no step-by-step guide, no outreach draft, no tracking. The gap between "synthesized" and "deployed" is entirely manual friction.
+### Feature: Global Candidate Settings Interface
 
-**Core Problem**: Ignacy (and any user) can see their tailored materials but has nowhere to go with them.
-
----
-
-## Target User
-
-**Primary**: Ignacy Januszek — technical PM, high agency, wants zero-friction between "this role is good" and "application sent." Prefers keyboard shortcuts and direct action over menus.
-
-**Secondary**: Any PM/technical candidate who deploys Runek with their own API key.
-
----
-
-## Feature Backlog — Prioritised
+- **User Story**: As a general user, I want to edit my personal profile, resume, and citizenship status via a UI, so that the AI targets jobs mathematically relevant to my life situation.
+- **Acceptance Criteria**:
+  - Given a user is in the dashboard, when they click "Settings", then they are presented with a form to define their Baseline CV, Core Skills, Preferred Hubs, and Citizenship/Work Authorization.
+  - Given a user holds an "EU Citizenship" (e.g., Poland), when the Engine evaluates an open role in Germany, then the LLM knows NO visa sponsorship is required and does not penalize the match score.
+  - Given a user requires sponsorship for the US (e.g., H1B), when the Engine evaluates a US role explicitly stating "No Sponsorship", then the match score is heavily penalized or automatically marked as "discarded".
+- **Priority**: P1 (Primary blocker for distribution)
+- **Dependencies**:
+  - Migration of `lib/data/profile.ts` into a dynamic DB or `profile.json` singleton store.
+  - Updates to the LLM Prompt in `/api/agent/match` to dynamically inject the user's citizenship context.
+- **Technical Constraints**: The LLM needs precise prompt instructions to understand the intersection of a user's citizenship against a job's location correctly (e.g. knowing that Poland grants EU-wide working rights).
+- **UX Considerations**: Must abstract complex ML-weight matching (like `sectorWeights`) into an easy-to-understand slider or tag builder.
 
 ---
 
-### P0 — Ship This Week (Makes it Actually Work)
+## Requirements Documentation Structure
 
-#### F1: Guided Application Flow
-**User Story**: As Ignacy, after AI synthesis, I want a step-by-step checklist so I know exactly what to do next without thinking.
+### 1. Functional Requirements
 
-**Acceptance Criteria**:
-- After synthesis completes, a 4-step mission checklist appears
-- Step 1: "Review CV" — expandable CV preview with copy button
-- Step 2: "Copy Cover Letter" — single-click copies to clipboard, shows ✓ confirmation
-- Step 3: "Open Job Posting" — opens `job.url` in new tab
-- Step 4: "Mark as Applied" — updates status to 'applied', logs timestamp
+- **State Management**: Implement a `ProfileStore` (similar to `PipelineStore`) that reads/writes from `profile.json`.
+- **Data Validation Rules**:
+  - Passports/Citizenships must be an array of standard Country identifiers to allow the LLM to process work eligibility accurately.
+  - "Open to Relocation" must conditionally require "Preferred Hubs/Regions."
+- **Integration Points**:
+  - Overhaul `match/route.ts` to replace `IGNACY_PROFILE` with `await ProfileStore.get()`.
+  - Overhaul `tailor/route.ts` to ensure cover letters mention the applicant's work authorization status only when it is a strategic advantage.
 
-**UX**: Steps are sequential but not gated. User can skip. Completed steps show green checkmark with monospace timestamp.
+### 2. Non-Functional Requirements
 
----
+- **Performance targets**: Profile persistence should be local-first, preventing DB latency during sweeping API match calls.
+- **Security**: Resumes and profiles contain highly identifiable personal data (PII). Ensure `profile.json` is strictly ignored by `.gitignore` if the project is open-sourced, and the Settings UI does not expose data publicly.
 
-#### F2: Copy-to-Clipboard on All Outputs
-**User Story**: As Ignacy, I want one-click copy on my CV markdown and cover letter so I can paste directly into application forms.
+### 3. User Experience Requirements
 
-**Acceptance Criteria**:
-- CV block has [COPY CV] button — copies full markdown
-- Cover letter block has [COPY CL] button — copies plain text
-- Button shows "COPIED ✓" for 2 seconds, then resets
-- Works on both synthesized output panel and export markdown
+- **Information Architecture**: Create a dedicated `/settings` page or a prominent Settings overlay accessible from the dashboard header.
+- **Progressive Disclosure**: Split the setup into fundamental "Job Preferences" (Location, Visa, Salary) vs "Matching Intelligence" (Base CV, Custom Skills & Weights).
 
 ---
 
-#### F3: Direct Apply Button
-**User Story**: As Ignacy, I want a single "APPLY NOW" action that opens the job URL and starts the application checklist simultaneously.
+## Critical Questions Checklist (For Stakeholder Review)
 
-**Acceptance Criteria**:
-- Button opens `job.url` in new tab
-- Simultaneously triggers synthesis if not yet done, OR shows checklist if already synthesized
-- Keyboard shortcut: `O` to open job URL when card is selected
-
----
-
-### P1 — Next Sprint (Makes it Powerful)
-
-#### F4: Cold Outreach Draft
-**User Story**: As Ignacy, after synthesis, I want an AI-generated LinkedIn message or cold email to the hiring manager so I can bypass the applicant queue.
-
-**Acceptance Criteria**:
-- "DRAFT OUTREACH" button appears post-synthesis
-- AI generates a 3-sentence LinkedIn DM and a 5-sentence cold email
-- Tone: direct, systems-first, not "I am writing to apply"
-- Output includes: suggested subject line, LinkedIn message, email body
-- Copy button on each output
-
-**Technical**: New API endpoint `POST /api/agent/outreach` — job + profile → outreach drafts
-
----
-
-#### F5: Follow-Up Scheduler
-**User Story**: As Ignacy, when I mark a job as applied, I want to set a follow-up reminder so I don't let applications go cold.
-
-**Acceptance Criteria**:
-- After marking applied, prompt: "Schedule follow-up? → 5 days / 7 days / Skip"
-- Stores follow-up date in pipeline store against the job
-- Dashboard shows "FOLLOW-UP DUE" badge on overdue applications
-- Export: `GET /api/agent/followups` returns all due follow-ups
-
----
-
-#### F6: Application Notes
-**User Story**: As Ignacy, I want to add a quick freeform note to any job so I can capture context (e.g., "spoke to recruiter", "strong AUV match", "salary unclear").
-
-**Acceptance Criteria**:
-- Clicking a job card shows a note field (textarea, 280 char limit)
-- Saves on blur or Enter
-- Notes visible in mission detail panel and in export JSON
-- Keyboard: `N` to focus note field when card selected
-
----
-
-### P2 — Future (Makes it Scale)
-
-#### F7: Daily Email Digest
-- Every morning: email summary of pipeline status + new matches + follow-ups due
-- Implementable via Vercel Cron + Resend/Nodemailer
-
-#### F8: LinkedIn Deep Link
-- If job source is LinkedIn, construct a direct application deep link
-- Pre-fill name/email from profile data
-
-#### F9: ATS Form Detector
-- On job URL open, detect if it's Greenhouse/Lever/Ashby
-- Offer to generate ATS-optimised bullet points (shorter, keyword-dense)
-
----
-
-## Success Metrics
-
-| Metric | Target |
-|--------|--------|
-| Time from "synthesize" to "applied" | < 3 minutes |
-| % of synthesized jobs that reach "applied" | > 60% |
-| Cover letter copy rate | > 90% of sessions |
-| Outreach draft usage | > 40% of applied jobs |
-
----
-
-## What We Build in v0.3
-
-**P0 only — makes it functional today:**
-1. Guided Application Checklist (post-synthesis)
-2. Copy-to-clipboard on CV + Cover Letter
-3. Direct "OPEN JOB" action + keyboard shortcut `O`
-4. Cold Outreach Draft via new `/api/agent/outreach` endpoint
-
-This turns the synthesis output from "nice to look at" into "application sent."
+- [x] Are there existing solutions we're improving upon? Yes, standard ATS platforms, but we are injecting autonomous matching.
+- [x] What's the minimum viable version? A simple React form that saves basic demography and citizenship to a JSON file rather than TS code.
+- [x] What are the potential risks? The LLM failing to accurately assess complex visa treaties (e.g. TN visas between Canada/US, or Blue Card rules). We must instruct the LLM to be conservative.
+- [ ] **GAPS / Needs Clarity from User**:
+      1. When we make things "changeable," do you want a full Settings UI page built right now, or should we just decouple it into an easy-to-edit JSON config file first for your initial distribution?
+      2. Should we add a hard rule logic for visas (e.g., *if job is US and user is not US -> instant discard*), or rely purely on the LLM to read the job description and make an intelligent deduction?

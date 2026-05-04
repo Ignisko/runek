@@ -21,7 +21,7 @@ export async function POST(request: Request) {
       // Ad-hoc scoring of a job not yet in pipeline
       job = {
         id: 'adhoc',
-        status: 'queued' as const,
+        status: 'open' as const,
         matchScore: 0,
         priority: 'medium' as const,
         postedAt: new Date().toISOString(),

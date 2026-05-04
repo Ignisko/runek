@@ -1,36 +1,43 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  /* Base surfaces */
-  --bg-base:    #0d1117;
-  --bg-surface: #161b22;
-  --bg-card:    #1c2128;
-  --bg-hover:   #22272e;
+  /* Deep navy game backgrounds */
+  --bg-base:      #060d18;
+  --bg-surface:   #0c1626;
+  --bg-card:      #101e30;
+  --bg-hover:     #162538;
+  --bg-glass:     rgba(16, 30, 48, 0.8);
+
+  /* Blue system */
+  --blue-core:    #4f8fff;
+  --blue-bright:  #6ba3ff;
+  --blue-glow:    rgba(79, 143, 255, 0.15);
+  --blue-border:  rgba(79, 143, 255, 0.25);
+  --blue-subtle:  rgba(79, 143, 255, 0.08);
 
   /* Borders */
-  --border-subtle:  #21262d;
-  --border-default: #30363d;
-  --border-strong:  #484f58;
+  --border-subtle:  rgba(79, 143, 255, 0.1);
+  --border-default: rgba(79, 143, 255, 0.2);
+  --border-strong:  rgba(79, 143, 255, 0.35);
 
   /* Text */
-  --text-primary:   #f0f6fc;
-  --text-secondary: #8b949e;
-  --text-tertiary:  #484f58;
-  --text-link:      #388bfd;
+  --text-primary:   #e8f0ff;
+  --text-secondary: #7a9cc4;
+  --text-tertiary:  #3d5a7a;
+  --text-link:      var(--blue-core);
 
-  /* Accent — calm blue, not neon */
-  --accent:         #388bfd;
-  --accent-subtle:  rgba(56, 139, 253, 0.1);
-  --accent-border:  rgba(56, 139, 253, 0.3);
+  /* Status — game-tier colours */
+  --color-critical: #ff6b6b;
+  --color-high:     #ffb347;
+  --color-medium:   #4f8fff;
+  --color-low:      #3d5a7a;
+  --color-success:  #4ade80;
+  --color-purple:   #c084fc;
 
-  /* Status */
-  --color-critical: #f85149;
-  --color-high:     #d29922;
-  --color-medium:   #388bfd;
-  --color-low:      #484f58;
-  --color-success:  #3fb950;
-  --color-purple:   #bc8cff;
+  /* Glows */
+  --glow-blue:    0 0 20px rgba(79, 143, 255, 0.25);
+  --glow-success: 0 0 16px rgba(74, 222, 128, 0.2);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -46,10 +53,35 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Scrollbars */
-::-webkit-scrollbar { width: 6px; }
+/* Subtle grid overlay on bg */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(79, 143, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(79, 143, 255, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+#__next { position: relative; z-index: 1; }
+
+::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 3px; }
 
-/* Selection */
-::selection { background: var(--accent-subtle); color: var(--text-primary); }
+::selection { background: var(--blue-glow); color: var(--text-primary); }
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(79,143,255,0.3); }
+  50% { box-shadow: 0 0 20px rgba(79,143,255,0.6); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}

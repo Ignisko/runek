@@ -5,7 +5,7 @@ import { Job } from '../../../../../../lib/types/job';
 /**
  * PATCH /api/agent/jobs/[id]/status
  * Update a job's status. Called by dashboard buttons or external agents.
- * Body: { status: 'suggested' | 'tailored' | 'applied' | 'discarded' }
+ * Body: { status: 'open' | 'synthesized' | 'applied' | 'interviewing' | 'offer_received' | 'accepted' | 'rejected' | 'no_answer' | 'discarded' }
  */
 export async function PATCH(
   request: Request,
@@ -14,7 +14,7 @@ export async function PATCH(
   const { id } = await params;
   const { status } = await request.json();
 
-  const validStatuses: Job['status'][] = ['queued', 'suggested', 'tailored', 'applied', 'discarded'];
+  const validStatuses: Job['status'][] = ['open', 'synthesized', 'applied', 'interviewing', 'offer_received', 'accepted', 'rejected', 'no_answer', 'discarded'];
   if (!validStatuses.includes(status)) {
     return NextResponse.json({ ok: false, error: `Invalid status: ${status}` }, { status: 400 });
   }

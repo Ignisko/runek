@@ -13,8 +13,8 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "Runek | AI PM Job Automator",
-  description: "High-velocity job application engine for Systems Product Managers in AI, Robotics, and Energy.",
+  title: "Runek | Faith-Based Service Engine",
+  description: "Compassionate, faith-driven vocational engine to help find roles that serve people in pain.",
 };
 
 export default function RootLayout({
@@ -26,6 +26,7 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${inter.variable} ${outfit.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <body className="font-sans min-h-screen bg-[#0A0A0A] text-[#E0E0E0] overflow-x-hidden transition-colors duration-300">
         <main className="relative flex flex-col min-h-screen">
