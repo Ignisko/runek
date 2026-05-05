@@ -1,98 +1,104 @@
-
-1/1
-
-Next.js 16.2.1 (stale)
-Turbopack
-Build Error
-
-Expected '</', got 'jsx text'
-./app/page.tsx (171:15)
-
-Expected '</', got 'jsx text'
-  169 |
-  170 |           </div>
-> 171 |         </div>
-      |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-> 172 |       </header>
-      | ^^^^^^
-  173 |
-  174 |       {/*── BODY ──*/}
-  175 |       <div style={{ maxWidth: 1440, margin: "0 auto", padding: "28px 28px", display: "gri...
-
-Parsing ecmascript source code failed
-
-Import traces:
-  Client Component Browser:
-    ./app/page.tsx [Client Component Browser]
-    ./app/page.tsx [Server Component]
-
-  Client Component SSR:
-    ./app/page.tsx [Client Component SSR]
-    ./app/page.tsx [Server Component]
-1
-2
-
-# Product Requirements Document: Configurable Candidate Profile & Employment Eligibility
+# Product Requirements Document: Runek – Autonomous Career Agent (SaaS MVP)
 
 ## Executive Summary
 
-- **Elevator Pitch**: Transform the Runek Job Application Engine from a single-user personalized agent into a multi-tenant or distributable SaaS tool by introducing a dynamic, configurable Candidate Profile system that powers intelligent job scoring.
-- **Problem Statement**: The current LLM-driven job matching engine uses a hardcoded configuration profile (`profile.ts`) tailored specifically to the original creator (including implicit European Union work eligibility based on Polish citizenship). If shared with other job-seekers, the engine would hallucinate job fits or draft cover letters with incorrect constraints and backgrounds.
-- **Target Audience**: Future users of the Runek Engine—technical professionals, PMs, and engineers who wish to automate their own job hunts without needing to edit raw TypeScript source files.
-- **Unique Selling Proposition**: Instead of manually cross-referencing visa requirements and relocation constraints per job, the engine autonomously cross-references the user's explicit work eligibilities (Citizenships / Visas) against a job's requirements to penalize or boost match scores.
-- **Success Metrics**:
-  1. 100% of the matching engine's context is decoupled from hardcoded source code.
-  2. Users can seamlessly onboard and dictate their visa/citizenship restrictions via a frontend GUI.
+- **Elevator Pitch**: A per-user cloud dashboard where job seekers track all their applications across LinkedIn, JustJoinIT, and any other platform — in one place, automatically.
+- **Problem Statement**: Job hunting is fragmented across dozens of platforms. There's no single source of truth for "where did I apply, what's the status, did they reply?".
+- **Target Audience**: Active job-seekers who apply across multiple platforms and want to stop losing track of their pipeline.
+- **USP**: Multi-platform application tracking + email inbox parsing + (future) AI autopilot agent that applies for you.
 
 ---
 
-## Feature Specifications
+## Product Tiers
 
-### Feature: Global Candidate Settings Interface
+### Free Tier
+- Google Login (Firebase Auth)
+- Unlimited manual application logging (Firestore, per-user)
+- Dashboard: table view of all applications with status + notes
+- Filtering & sorting by status/date
 
-- **User Story**: As a general user, I want to edit my personal profile, resume, and citizenship status via a UI, so that the AI targets jobs mathematically relevant to my life situation.
-- **Acceptance Criteria**:
-  - Given a user is in the dashboard, when they click "Settings", then they are presented with a form to define their Baseline CV, Core Skills, Preferred Hubs, and Citizenship/Work Authorization.
-  - Given a user holds an "EU Citizenship" (e.g., Poland), when the Engine evaluates an open role in Germany, then the LLM knows NO visa sponsorship is required and does not penalize the match score.
-  - Given a user requires sponsorship for the US (e.g., H1B), when the Engine evaluates a US role explicitly stating "No Sponsorship", then the match score is heavily penalized or automatically marked as "discarded".
-- **Priority**: P1 (Primary blocker for distribution)
-- **Dependencies**:
-  - Migration of `lib/data/profile.ts` into a dynamic DB or `profile.json` singleton store.
-  - Updates to the LLM Prompt in `/api/agent/match` to dynamically inject the user's citizenship context.
-- **Technical Constraints**: The LLM needs precise prompt instructions to understand the intersection of a user's citizenship against a job's location correctly (e.g. knowing that Poland grants EU-wide working rights).
-- **UX Considerations**: Must abstract complex ML-weight matching (like `sectorWeights`) into an easy-to-understand slider or tag builder.
+### Paid Tier (Future)
+- Email integration: read replies from a dedicated job email (ProtonMail / Gmail)
+- Autopilot agent: local or cloud-based agent that submits applications automatically
 
 ---
 
-## Requirements Documentation Structure
+## Feature Specifications (MVP — Free Tier)
 
-### 1. Functional Requirements
+### 1. Google Authentication
+- **User Story**: As a job-seeker, I want to log in with Google so my data is private and synced across devices.
+- **Priority**: P0
 
-- **State Management**: Implement a `ProfileStore` (similar to `PipelineStore`) that reads/writes from `profile.json`.
-- **Data Validation Rules**:
-  - Passports/Citizenships must be an array of standard Country identifiers to allow the LLM to process work eligibility accurately.
-  - "Open to Relocation" must conditionally require "Preferred Hubs/Regions."
-- **Integration Points**:
-  - Overhaul `match/route.ts` to replace `IGNACY_PROFILE` with `await ProfileStore.get()`.
-  - Overhaul `tailor/route.ts` to ensure cover letters mention the applicant's work authorization status only when it is a strategic advantage.
+### 2. Application Dashboard
+- **User Story**: As a user, I want to see all my job applications in one table.
+- **Columns**: Company, Role, Platform (LinkedIn/JustJoinIT/etc.), Status, Applied At, Notes
+- **Design**: Keep current dark/glassmorphism design
+- **Priority**: P0
 
-### 2. Non-Functional Requirements
+### 3. CRUD — Applications
+- **User Story**: As a user, I want to add/edit/delete applications manually.
+- **Fields**: company, role, platform, link, status, notes, appliedAt
+- **Status Enum**: saved | applied | interview | offer | rejected
+- **Priority**: P0
 
-- **Performance targets**: Profile persistence should be local-first, preventing DB latency during sweeping API match calls.
-- **Security**: Resumes and profiles contain highly identifiable personal data (PII). Ensure `profile.json` is strictly ignored by `.gitignore` if the project is open-sourced, and the Settings UI does not expose data publicly.
+### 4. Filtering & Sorting
+- Filter by: status, platform
+- Sort by: appliedAt (desc default)
+- **Priority**: P1
 
-### 3. User Experience Requirements
-
-- **Information Architecture**: Create a dedicated `/settings` page or a prominent Settings overlay accessible from the dashboard header.
-- **Progressive Disclosure**: Split the setup into fundamental "Job Preferences" (Location, Visa, Salary) vs "Matching Intelligence" (Base CV, Custom Skills & Weights).
+### 5. Remove: AI Synthesize Feature
+- The current "Synthesize" / cover letter generation button is to be **removed** from the UI.
+- AI features will re-appear in the Paid Tier as an autopilot agent.
+- **Priority**: P0 (must be removed for clean scope)
 
 ---
 
-## Critical Questions Checklist (For Stakeholder Review)
+## Future Roadmap (Out of Scope for MVP)
 
-- [x] Are there existing solutions we're improving upon? Yes, standard ATS platforms, but we are injecting autonomous matching.
-- [x] What's the minimum viable version? A simple React form that saves basic demography and citizenship to a JSON file rather than TS code.
-- [x] What are the potential risks? The LLM failing to accurately assess complex visa treaties (e.g. TN visas between Canada/US, or Blue Card rules). We must instruct the LLM to be conservative.
-- [ ] **GAPS / Needs Clarity from User**:
-      1. When we make things "changeable," do you want a full Settings UI page built right now, or should we just decouple it into an easy-to-edit JSON config file first for your initial distribution?
-      2. Should we add a hard rule logic for visas (e.g., *if job is US and user is not US -> instant discard*), or rely purely on the LLM to read the job description and make an intelligent deduction?
+### Email Reader
+- User connects a dedicated job-search email account (ProtonMail / Gmail via OAuth)
+- Runek parses incoming emails: interview invites, rejections, offers
+- Auto-updates application status based on email content
+- **Architecture options**: Gmail API / IMAP polling / ProtonMail Bridge
+
+### Autopilot Agent (Paid)
+- **Option A (Local)**: User downloads a desktop agent (Electron or .exe) that uses Playwright to apply on their machine — no cloud costs, fully private
+- **Option B (Cloud)**: Vercel/Firebase Cloud Function or a dedicated VM runs headless Playwright targeting job boards
+- **Decision needed**: Architecture choice depends on cost model and anti-bot tolerance of target job boards
+
+---
+
+## Data Schema (Firestore)
+
+```
+users/{userId}
+  - email, displayName, createdAt, tier (free/pro)
+
+applications/{appId}
+  - userId (string)       ← scoped to user
+  - company (string)
+  - role (string)
+  - platform (string)     ← "LinkedIn", "JustJoinIT", "Manual", etc.
+  - link (url)
+  - status (enum)
+  - notes (text)
+  - appliedAt (timestamp)
+  - updatedAt (timestamp)
+```
+
+## Security Rules (Firestore)
+
+```
+match /applications/{appId} {
+  allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+  allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+}
+```
+
+---
+
+## Open Questions
+
+1. **Email integration timing**: When do you want to tackle email? Post-launch or in parallel?
+2. **Autopilot agent**: Local (user runs it) or cloud-hosted? Local avoids infra costs but requires a download.
+3. **Platform tracking**: Should the "platform" field be a free-text input or a curated dropdown (LinkedIn, JustJoinIT, Pracuj, etc.)?
