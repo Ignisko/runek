@@ -40,6 +40,45 @@
   --glow-success: 0 0 16px rgba(74, 222, 128, 0.2);
 }
 
+:root[data-theme="light"] {
+  /* Clean white/gray backgrounds */
+  --bg-base:      #f8fafc;
+  --bg-surface:   #ffffff;
+  --bg-card:      #ffffff;
+  --bg-hover:     #f1f5f9;
+  --bg-glass:     rgba(255, 255, 255, 0.85);
+
+  /* Blue system */
+  --blue-core:    #3b82f6;
+  --blue-bright:  #2563eb;
+  --blue-glow:    rgba(59, 130, 246, 0.15);
+  --blue-border:  rgba(59, 130, 246, 0.25);
+  --blue-subtle:  rgba(59, 130, 246, 0.08);
+
+  /* Borders */
+  --border-subtle:  #e2e8f0;
+  --border-default: #cbd5e1;
+  --border-strong:  #94a3b8;
+
+  /* Text */
+  --text-primary:   #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary:  #94a3b8;
+  --text-link:      var(--blue-core);
+
+  /* Status */
+  --color-critical: #ef4444;
+  --color-high:     #f59e0b;
+  --color-medium:   #3b82f6;
+  --color-low:      #64748b;
+  --color-success:  #10b981;
+  --color-purple:   #8b5cf6;
+
+  /* Glows */
+  --glow-blue:    0 0 20px rgba(59, 130, 246, 0.15);
+  --glow-success: 0 0 16px rgba(16, 185, 129, 0.1);
+}
+
 *, *::before, *::after { box-sizing: border-box; }
 
 html, body {

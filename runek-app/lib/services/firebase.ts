@@ -21,26 +21,34 @@ const googleProvider = new GoogleAuthProvider();
 export { auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged };
 export type { User };
 
-// --- Cloud Sync Logic ---
+// --- Application CRUD Logic ---
 
-export async function syncProfileToCloud(userId: string, profile: any) {
-  const userDoc = doc(db, "users", userId);
-  await setDoc(userDoc, { profile, updatedAt: new Date().toISOString() }, { merge: true });
+export interface Application {
+  id?: string;
+  userId: string;
+  company: string;
+  role: string;
+  platform: string;
+  link?: string;
+  status: 'saved' | 'applied' | 'interview' | 'offer' | 'rejected';
+  notes?: string;
+  appliedAt: string;
+  updatedAt: string;
 }
 
-export async function getProfileFromCloud(userId: string) {
-  const userDoc = doc(db, "users", userId);
-  const snap = await getDoc(userDoc);
-  return snap.exists() ? snap.data().profile : null;
+export async function createApplication(appData: Application) {
+  const newDocRef = doc(collection(db, "applications"));
+  await setDoc(newDocRef, { ...appData, id: newDocRef.id });
+  return newDocRef.id;
 }
 
-export async function syncJobToCloud(userId: string, job: any) {
-  const jobDoc = doc(db, "users", userId, "jobs", job.id);
-  await setDoc(jobDoc, { ...job, updatedAt: new Date().toISOString() });
+export async function updateApplication(appId: string, updates: Partial<Application>) {
+  const docRef = doc(db, "applications", appId);
+  await setDoc(docRef, { ...updates, updatedAt: new Date().toISOString() }, { merge: true });
 }
 
-export async function getJobsFromCloud(userId: string) {
-  const jobsCol = collection(db, "users", userId, "jobs");
-  const snap = await getDocs(jobsCol);
-  return snap.docs.map(d => d.data());
+export async function deleteApplication(appId: string) {
+  const docRef = doc(db, "applications", appId);
+  const { deleteDoc } = await import("firebase/firestore");
+  await deleteDoc(docRef);
 }

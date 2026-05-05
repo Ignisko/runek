@@ -3,9 +3,45 @@
 import React, { useState, useEffect } from "react";
 import { auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged, User } from "../lib/services/firebase";
 
+function Logo({ size = "large" }: { size?: "large" | "small" }) {
+  const textSz = size === "large" ? 42 : 26;
+  
+  return (
+    <div style={{ display: "flex", alignItems: "baseline", userSelect: "none" }}>
+      <span style={{ 
+        fontFamily: "'Space Grotesk', sans-serif", 
+        fontWeight: 900, 
+        fontSize: textSz, 
+        letterSpacing: "-0.02em", 
+        color: "var(--text-primary)",
+        textShadow: "1px 0 0 var(--text-primary), -1px 0 0 var(--text-primary)" // Make RUN thicker
+      }}>
+        RUN
+      </span>
+      <span style={{ 
+        fontFamily: "'Space Grotesk', sans-serif", 
+        fontWeight: 900, 
+        fontSize: textSz, 
+        color: "var(--blue-core)", 
+        display: "inline-block", 
+        transform: "skewX(-18deg)", 
+        marginLeft: "-1px", 
+        textShadow: "1px 0 0 var(--blue-core), -1px 0 0 var(--blue-core)" 
+      }}>
+        EK
+      </span>
+    </div>
+  );
+}
+
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -44,9 +80,8 @@ export default function Home() {
     return (
       <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "var(--bg-base)" }}>
         <div style={{ textAlign: "center", maxWidth: 400, padding: 40, background: "var(--bg-card)", border: "1px solid var(--border-subtle)", borderRadius: 16, boxShadow: "0 20px 40px rgba(0,0,0,0.4)" }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 2, marginBottom: 16 }}>
-            <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 32, letterSpacing: "-0.02em", color: "var(--text-primary)" }}>Run</span>
-            <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 32, letterSpacing: "-0.02em", color: "var(--blue-core)" }}>ek</span>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
+            <Logo size="large" />
           </div>
           <p style={{ margin: "0 0 32px", color: "var(--text-secondary)", lineHeight: 1.6 }}>
             Your personal, cloud-synced career agent. Track your applications across all platforms in one place.
@@ -66,6 +101,13 @@ export default function Home() {
             </svg>
             Sign in with Google
           </button>
+          
+          <button 
+            onClick={() => setUser({ uid: "dev-user-123", displayName: "Dev Mode" } as User)}
+            style={{ width: "100%", padding: "12px", borderRadius: 8, border: "1px solid var(--border-strong)", background: "transparent", color: "var(--text-secondary)", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", marginTop: 12 }}
+          >
+            Skip Login (Dev Only)
+          </button>
         </div>
       </div>
     );
@@ -74,14 +116,36 @@ export default function Home() {
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg-base)" }}>
       {/* ── HEADER ── */}
-      <header style={{ borderBottom: "1px solid var(--border-subtle)", background: "rgba(6,13,24,0.9)", backdropFilter: "blur(20px)", position: "sticky", top: 0, zIndex: 50 }}>
+      <header style={{ borderBottom: "1px solid var(--border-subtle)", background: "var(--bg-glass)", backdropFilter: "blur(20px)", position: "sticky", top: 0, zIndex: 50 }}>
         <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 2 }}>
-            <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 20, letterSpacing: "-0.02em", color: "var(--text-primary)" }}>Run</span>
-            <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 20, letterSpacing: "-0.02em", color: "var(--blue-core)" }}>ek</span>
-          </div>
+          <Logo size="small" />
           
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <button 
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              style={{ background: "transparent", color: "var(--text-tertiary)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", transition: "transform 0.2s" }}
+              onMouseOver={e => e.currentTarget.style.transform = "scale(1.1)"}
+              onMouseOut={e => e.currentTarget.style.transform = "scale(1)"}
+              title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            >
+              {theme === "dark" ? (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "#facc15" }}>
+                  <circle cx="12" cy="12" r="5"></circle>
+                  <line x1="12" y1="1" x2="12" y2="3"></line>
+                  <line x1="12" y1="21" x2="12" y2="23"></line>
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                  <line x1="1" y1="12" x2="3" y2="12"></line>
+                  <line x1="21" y1="12" x2="23" y2="12"></line>
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+              ) : (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--blue-core)" }}>
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+              )}
+            </button>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               {user.photoURL && <img src={user.photoURL} alt="Profile" style={{ width: 32, height: 32, borderRadius: "50%", border: "1px solid var(--border-subtle)" }} />}
               <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>{user.displayName?.split(" ")[0]}</span>
