@@ -18,9 +18,9 @@ export default function Home() {
   const handleLogin = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login failed:", error);
-      alert("Failed to log in. Please check your Firebase configuration and try again.");
+      alert(`Login Error: ${error.message}\n\nIf this says "API key not valid", you forgot to add Environment Variables in Vercel. If it says "unauthorized domain", the domain wasn't saved in Firebase.`);
     }
   };
 
