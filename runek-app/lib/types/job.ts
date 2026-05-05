@@ -17,6 +17,8 @@ export interface Job {
   appliedAt?: string;
   notes?: string;
   followUpDate?: string;
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  visaRequirements?: string;
 }
 
 export interface TailoredContent {
@@ -34,6 +36,7 @@ export interface MatchResult {
   signals: string[];        // matched keywords / profile signals
   gaps: string[];           // missing qualifications
   summary: string;          // 1-sentence human-readable explanation
+  priority: Job['priority'];
 }
 
 

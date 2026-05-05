@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Job, AgentLog, AgentStatus, TailoredContent } from "../lib/types/job";
+import { Job, AgentLog, TailoredContent } from "../lib/types/job";
 import { auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged, User, syncProfileToCloud, getProfileFromCloud, syncJobToCloud } from "../lib/services/firebase";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -546,7 +546,7 @@ function JobCard({ job, isSelected, isTailoring, onClick, onTailor, onOpen, onAp
                    value={job.status} 
                    onChange={e => { e.stopPropagation(); onStatusChange(e.target.value as Job["status"]); }} 
                    style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", borderRadius: 6, padding: "4px 8px", fontSize: 12, outline: "none", cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
-                   {["open", "synthesized", "applied", "interviewing", "offer_received", "accepted", "rejected", "no_answer", "discarded"].map(s => <option key={s} value={s} style={{ textTransform: "capitalize" }}>{s.replace("_", " ")}</option>)}
+                   {["open", "synthesized", "applied", "interviewing", "offer_received", "accepted", "rejected", "no_answer", "discarded"].map((s: string) => <option key={s} value={s} style={{ textTransform: "capitalize" }}>{s.replace("_", " ")}</option>)}
                  </select>
                </div>
             )}
@@ -874,7 +874,7 @@ function SettingsModal({ show, onClose, user }: { show: boolean; onClose: () => 
             <div style={{ display: "flex", gap: 16 }}>
               <div style={{ flex: 1 }}>
                 <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 6, textTransform: "uppercase" }}>Target Region / Areas</label>
-                <input value={profile.preferredHubs?.join(", ")} onChange={e => setProfile({...profile, preferredHubs: e.target.value.split(",").map(s => s.trim())})} placeholder="e.g. Warsaw, Berlin, Remote" style={{ width: "100%", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", color: "#fff", padding: "10px", borderRadius: 8, fontSize: 14 }} />
+                <input value={profile.preferredHubs?.join(", ")} onChange={e => setProfile({...profile, preferredHubs: e.target.value.split(",").map((s: string) => s.trim())})} placeholder="e.g. Warsaw, Berlin, Remote" style={{ width: "100%", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", color: "#fff", padding: "10px", borderRadius: 8, fontSize: 14 }} />
               </div>
               <div style={{ flex: 1 }}>
                 <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 6, textTransform: "uppercase" }}>Visa Status</label>
@@ -884,7 +884,7 @@ function SettingsModal({ show, onClose, user }: { show: boolean; onClose: () => 
 
             <div>
               <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 6, textTransform: "uppercase" }}>Additional Skills / Tech Stack</label>
-              <input value={profile.signals?.map(s => s.skill).join(", ")} onChange={e => setProfile({...profile, signals: e.target.value.split(",").map(s => ({ skill: s.trim(), weight: 1.0 }))})} placeholder="e.g. React, Python, Product Strategy" style={{ width: "100%", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", color: "#fff", padding: "10px", borderRadius: 8, fontSize: 14 }} />
+              <input value={profile.signals?.map((s: any) => s.skill).join(", ")} onChange={e => setProfile({...profile, signals: e.target.value.split(",").map((s: string) => ({ skill: s.trim(), weight: 1.0 }))})} placeholder="e.g. React, Python, Product Strategy" style={{ width: "100%", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", color: "#fff", padding: "10px", borderRadius: 8, fontSize: 14 }} />
             </div>
             <div>
               <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 6, textTransform: "uppercase" }}>Qwen / OpenAI API Key (Optional)</label>

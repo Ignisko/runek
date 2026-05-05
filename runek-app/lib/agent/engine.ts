@@ -113,7 +113,7 @@ async function run() {
             foundNewJobOnCurrentView = true;
             noNewJobsStrikes = 0;
 
-            const cardText = await card.textContent().catch(() => "");
+            const cardText = (await card.textContent().catch(() => "")) || "";
             
             if (cardText.includes("Applied") || cardText.includes("Aplikowano")) {
                 continue;

@@ -39,6 +39,7 @@ export class JustJoinScraper {
       postedAt: new Date().toISOString(),
       status: 'open',
       matchScore: 0,
+      priority: 'medium',
       category: 'General',
       ingestedBy: 'scraper'
     };

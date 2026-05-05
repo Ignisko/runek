@@ -21,6 +21,7 @@ export class MatchEngine {
           jobId: job.id,
           score: 5,
           signals: [],
+          priority: 'low',
           gaps: [`Disqualifying keyword: "${anti}"`],
           summary: `Role appears misaligned (contains "${anti}").`,
         };
@@ -61,6 +62,12 @@ export class MatchEngine {
 
     const total = Math.min(100, Math.round(signalScore + sectorBonus + locationBonus));
 
+    // ── Priority calculation ─────────────────────────────────────────────
+    let priority: Job['priority'] = 'low';
+    if (total >= 88) priority = 'critical';
+    else if (total >= 75) priority = 'high';
+    else if (total >= 55) priority = 'medium';
+
     // ── Gap detection ────────────────────────────────────────────────────
     const gaps: string[] = [];
     if (total < 50) gaps.push('Low keyword overlap with profile');
@@ -69,6 +76,7 @@ export class MatchEngine {
       jobId: job.id,
       score: total,
       signals: matched,
+      priority,
       gaps,
       summary: this.buildSummary(job, matched, total),
     };
