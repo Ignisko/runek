@@ -28,10 +28,16 @@ export default function RootLayout({
       className={`${inter.variable} ${outfit.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="font-sans min-h-screen overflow-x-hidden transition-colors duration-300">
-        <main className="relative flex flex-col min-h-screen">
+      <body className="font-sans min-h-screen overflow-x-hidden transition-colors duration-300 flex flex-col">
+        <main className="relative flex-1 flex flex-col">
           {children}
         </main>
+        <footer style={{ padding: "24px", textAlign: "center", borderTop: "1px solid var(--border-subtle)", background: "var(--bg-base)" }}>
+          <div style={{ display: "flex", justifyContent: "center", gap: 24, fontFamily: "'Space Grotesk', sans-serif", fontSize: 13 }}>
+            <a href="/privacy" style={{ color: "var(--text-tertiary)", textDecoration: "none" }}>Privacy</a>
+            <a href="/terms" style={{ color: "var(--text-tertiary)", textDecoration: "none" }}>Terms</a>
+          </div>
+        </footer>
       </body>
     </html>
   );

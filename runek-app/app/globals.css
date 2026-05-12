@@ -38,6 +38,10 @@
   /* Glows */
   --glow-blue:    0 0 20px rgba(79, 143, 255, 0.25);
   --glow-success: 0 0 16px rgba(74, 222, 128, 0.2);
+
+  /* Logo Banner (Dark Mode) */
+  --logo-bg:      linear-gradient(135deg, #0e1b38, #163e87);
+  --logo-shadow:  0 8px 24px rgba(22, 62, 135, 0.3), inset 0 1px 0 rgba(255,255,255,0.15);
 }
 
 :root[data-theme="light"] {
@@ -77,6 +81,10 @@
   /* Glows */
   --glow-blue:    0 0 20px rgba(59, 130, 246, 0.15);
   --glow-success: 0 0 16px rgba(16, 185, 129, 0.1);
+
+  /* Logo Banner (Light Mode) */
+  --logo-bg:      linear-gradient(135deg, #2563eb, #60a5fa);
+  --logo-shadow:  0 8px 24px rgba(59, 130, 246, 0.35), inset 0 1px 0 rgba(255,255,255,0.3);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
